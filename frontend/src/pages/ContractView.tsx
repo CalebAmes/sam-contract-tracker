@@ -54,7 +54,7 @@ const ContractView: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(API_CONFIG.contract(id));
+      const response = await fetch(API_CONFIG.endpoints.contract(id));
 
       if (!response.ok) {
         throw new Error(`Failed to fetch contract: ${response.status}`);

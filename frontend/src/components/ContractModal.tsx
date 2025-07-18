@@ -52,7 +52,7 @@ const ContractModal: React.FC<ContractModalProps> = ({
       setError(null);
 
       const response = await fetch(
-        API_CONFIG.contract(contractId)
+        API_CONFIG.endpoints.contract(contractId)
       );
 
       if (!response.ok) {
