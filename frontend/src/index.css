@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: black;
+  }
+  
+  html.dark {
+    background-color: black;
+  }
+  
+  :root {
+    --background: 255 255 255;
+    --foreground: 15 23 42;
+    --card: 255 255 255;
+    --card-foreground: 15 23 42;
+    --border: 226 232 240;
+    --input: 226 232 240;
+    --muted: 248 250 252;
+    --muted-foreground: 100 116 139;
+  }
+
+  .dark {
+    --background: 0 0 0;
+    --foreground: 250 250 250;
+    --card: 9 9 11;
+    --card-foreground: 250 250 250;
+    --border: 24 24 27;
+    --input: 9 9 11;
+    --muted: 24 24 27;
+    --muted-foreground: 161 161 170;
+  }
+}

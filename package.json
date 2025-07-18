@@ -2,43 +2,25 @@
   "name": "sam-contract-tracker",
   "version": "0.1.0",
   "private": true,
-  "dependencies": {
-    "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^13.5.0",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.126",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
-  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run start --workspace=frontend\"",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "start": "npm run start --workspace=backend",
+    "test": "npm run test --workspace=frontend"
   },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "tailwindcss-animate": "^1.0.7"
   },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+  "dependencies": {
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-tooltip": "^1.2.7"
   }
 }
