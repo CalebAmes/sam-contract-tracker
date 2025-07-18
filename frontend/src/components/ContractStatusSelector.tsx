@@ -61,7 +61,7 @@ const ContractStatusSelector: React.FC<ContractStatusSelectorProps> = ({
 
     try {
       const response = await fetch(
-        `http://localhost:3001/api/contracts/${contractId}/status`,
+        `http://spicymini:3001/api/contracts/${contractId}/status`,
         {
           method: "PUT",
           headers: {

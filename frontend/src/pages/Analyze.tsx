@@ -97,10 +97,10 @@ export default function Analyze() {
       let methodName: string;
 
       if (fetchMethod === "client") {
-        endpoint = "http://localhost:3001/api/fetch-contract-client";
+        endpoint = "http://spicymini:3001/api/fetch-contract-client";
         methodName = "Client API";
       } else {
-        endpoint = "http://localhost:3001/api/fetch-contract";
+        endpoint = "http://spicymini:3001/api/fetch-contract";
         methodName = "Official API";
       }
 
@@ -125,7 +125,7 @@ export default function Analyze() {
           console.log("Client API contract data:", data.contract);
           console.log("Metadata:", data.metadata);
           console.log("Attachments:", data.attachments);
-          
+
           // Transform the contract data to match the expected analysis format
           const analysisData: ContractAnalysis = {
             contract: {
@@ -133,7 +133,8 @@ export default function Analyze() {
               title: data.contract.title,
               url: data.contract.url,
               description: data.contract.description,
-              organization: data.metadata?.organizationId || "Unknown Organization",
+              organization:
+                data.metadata?.organizationId || "Unknown Organization",
               postedDate: data.contract.postedDate,
               deadline: data.contract.deadline,
               attachments: data.attachments || [],
@@ -141,22 +142,25 @@ export default function Analyze() {
             analysis: {
               wrapperScore: data.contract.aiScore || 0,
               indicators: [],
-              summary: "Analysis pending - contract fetched successfully from client API",
+              summary:
+                "Analysis pending - contract fetched successfully from client API",
               recommendation: "investigate" as const,
               analyzedAt: new Date().toISOString(),
             },
           };
-          
+
           setAnalysis(analysisData);
           setError(null);
-          
+
           // Show success message briefly then redirect to contract view
           setTimeout(() => {
             navigate(`/contracts/${opportunityId}`);
           }, 2000);
         } else {
-          setError(`Contract fetched successfully (${methodName}) - Redirecting to contract view...`);
-          
+          setError(
+            `Contract fetched successfully (${methodName}) - Redirecting to contract view...`
+          );
+
           // Redirect to contract view after success
           setTimeout(() => {
             navigate(`/contracts/${opportunityId}`);
@@ -268,18 +272,26 @@ export default function Analyze() {
                   <input
                     type="checkbox"
                     checked={fetchMethod === "api"}
-                    onChange={(e) => setFetchMethod(e.target.checked ? "api" : "client")}
+                    onChange={(e) =>
+                      setFetchMethod(e.target.checked ? "api" : "client")
+                    }
                     className="sr-only"
                   />
                   <div
                     className={`w-11 h-6 rounded-full cursor-pointer transition-colors ${
-                      fetchMethod === "api" ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"
+                      fetchMethod === "api"
+                        ? "bg-blue-500"
+                        : "bg-gray-300 dark:bg-gray-600"
                     }`}
-                    onClick={() => setFetchMethod(fetchMethod === "api" ? "client" : "api")}
+                    onClick={() =>
+                      setFetchMethod(fetchMethod === "api" ? "client" : "api")
+                    }
                   >
                     <div
                       className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                        fetchMethod === "api" ? "translate-x-5" : "translate-x-0.5"
+                        fetchMethod === "api"
+                          ? "translate-x-5"
+                          : "translate-x-0.5"
                       } mt-0.5`}
                     />
                   </div>
@@ -291,8 +303,9 @@ export default function Analyze() {
             {fetchMethod === "client" && (
               <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>Client API Mode:</strong> Uses the same API that SAM.gov's website uses internally. 
-                  Requires session tokens but may be more reliable than the public API.
+                  <strong>Client API Mode:</strong> Uses the same API that
+                  SAM.gov's website uses internally. Requires session tokens but
+                  may be more reliable than the public API.
                 </p>
               </div>
             )}
@@ -300,8 +313,9 @@ export default function Analyze() {
             {fetchMethod === "api" && (
               <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                 <p className="text-sm text-green-800 dark:text-green-200">
-                  <strong>Public API Mode:</strong> Uses the documented SAM.gov API with API keys. 
-                  Subject to rate limits but provides structured data.
+                  <strong>Public API Mode:</strong> Uses the documented SAM.gov
+                  API with API keys. Subject to rate limits but provides
+                  structured data.
                 </p>
               </div>
             )}
@@ -314,7 +328,9 @@ export default function Analyze() {
               <Brain className="w-4 h-4" />
               {isAnalyzing
                 ? "Analyzing Contract..."
-                : `Analyze Contract (${fetchMethod === "api" ? "Public API" : "Client API"})`}
+                : `Analyze Contract (${
+                    fetchMethod === "api" ? "Public API" : "Client API"
+                  })`}
             </button>
           </div>
         </div>

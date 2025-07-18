@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, MessageSquare } from 'lucide-react';
-import { NoteType } from '../types';
+import React, { useState, useEffect } from "react";
+import { Plus, Edit2, Trash2, Save, X, MessageSquare } from "lucide-react";
+import { NoteType } from "../types";
 
 interface AnalysisNote {
   id: string;
@@ -17,15 +17,18 @@ interface AnalysisNotesProps {
   analysisVersion: number;
 }
 
-const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersion }) => {
+const AnalysisNotes: React.FC<AnalysisNotesProps> = ({
+  contractId,
+  analysisVersion,
+}) => {
   const [notes, setNotes] = useState<AnalysisNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingNote, setEditingNote] = useState<string | null>(null);
-  const [newNote, setNewNote] = useState('');
+  const [newNote, setNewNote] = useState("");
   const [newNoteType, setNewNoteType] = useState<NoteType>(NoteType.GENERAL);
-  const [editContent, setEditContent] = useState('');
+  const [editContent, setEditContent] = useState("");
   const [deletingNote, setDeletingNote] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,17 +39,19 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch(`http://localhost:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`);
-      
+
+      const response = await fetch(
+        `http://spicymini:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`
+      );
+
       if (!response.ok) {
         throw new Error(`Failed to fetch notes: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setNotes(data.notes || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch notes');
+      setError(err instanceof Error ? err.message : "Failed to fetch notes");
     } finally {
       setLoading(false);
     }
@@ -54,68 +59,83 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
 
   const addNote = async () => {
     if (!newNote.trim()) return;
-    
+
     try {
-      const response = await fetch(`http://localhost:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote, type: newNoteType })
-      });
-      
+      const response = await fetch(
+        `http://spicymini:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: newNote, type: newNoteType }),
+        }
+      );
+
       if (!response.ok) {
         throw new Error(`Failed to add note: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      setNotes(prev => [data.note, ...prev]);
-      setNewNote('');
+      setNotes((prev) => [data.note, ...prev]);
+      setNewNote("");
       setNewNoteType(NoteType.GENERAL);
       setShowAddForm(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add note');
+      setError(err instanceof Error ? err.message : "Failed to add note");
     }
   };
 
   const updateNote = async (noteId: string) => {
     if (!editContent.trim()) return;
-    
+
     try {
-      const response = await fetch(`http://localhost:3001/api/analysis-notes/${noteId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editContent })
-      });
-      
+      const response = await fetch(
+        `http://spicymini:3001/api/analysis-notes/${noteId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: editContent }),
+        }
+      );
+
       if (!response.ok) {
         throw new Error(`Failed to update note: ${response.status}`);
       }
-      
-      setNotes(prev => prev.map(note => 
-        note.id === noteId 
-          ? { ...note, content: editContent, updatedAt: new Date().toISOString() }
-          : note
-      ));
+
+      setNotes((prev) =>
+        prev.map((note) =>
+          note.id === noteId
+            ? {
+                ...note,
+                content: editContent,
+                updatedAt: new Date().toISOString(),
+              }
+            : note
+        )
+      );
       setEditingNote(null);
-      setEditContent('');
+      setEditContent("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update note');
+      setError(err instanceof Error ? err.message : "Failed to update note");
     }
   };
 
   const deleteNote = async (noteId: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/analysis-notes/${noteId}`, {
-        method: 'DELETE'
-      });
-      
+      const response = await fetch(
+        `http://spicymini:3001/api/analysis-notes/${noteId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
       if (!response.ok) {
         throw new Error(`Failed to delete note: ${response.status}`);
       }
-      
-      setNotes(prev => prev.filter(note => note.id !== noteId));
+
+      setNotes((prev) => prev.filter((note) => note.id !== noteId));
       setDeletingNote(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete note');
+      setError(err instanceof Error ? err.message : "Failed to delete note");
     }
   };
 
@@ -126,50 +146,50 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
 
   const cancelEdit = () => {
     setEditingNote(null);
-    setEditContent('');
+    setEditContent("");
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getNoteTypeColor = (type: NoteType) => {
     switch (type) {
       case NoteType.STRATEGY:
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
       case NoteType.RESEARCH:
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
       case NoteType.CONTACT:
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
       case NoteType.DECISION:
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
       case NoteType.FOLLOW_UP:
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
       default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
     }
   };
 
   const getNoteTypeLabel = (type: NoteType) => {
     switch (type) {
       case NoteType.STRATEGY:
-        return 'Strategy';
+        return "Strategy";
       case NoteType.RESEARCH:
-        return 'Research';
+        return "Research";
       case NoteType.CONTACT:
-        return 'Contact';
+        return "Contact";
       case NoteType.DECISION:
-        return 'Decision';
+        return "Decision";
       case NoteType.FOLLOW_UP:
-        return 'Follow Up';
+        return "Follow Up";
       default:
-        return 'General';
+        return "General";
     }
   };
 
@@ -227,7 +247,7 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
               <button
                 onClick={() => {
                   setShowAddForm(false);
-                  setNewNote('');
+                  setNewNote("");
                   setNewNoteType(NoteType.GENERAL);
                 }}
                 className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
@@ -250,26 +270,37 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
         {loading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="text-sm text-muted-foreground mt-2">Loading notes...</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Loading notes...
+            </p>
           </div>
         ) : notes.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p>No notes for this analysis version</p>
-            <p className="text-sm">Add notes to track your thoughts and findings</p>
+            <p className="text-sm">
+              Add notes to track your thoughts and findings
+            </p>
           </div>
         ) : (
           notes.map((note) => (
-            <div key={note.id} className="p-4 border border-border rounded-lg bg-card">
+            <div
+              key={note.id}
+              className="p-4 border border-border rounded-lg bg-card"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${getNoteTypeColor(note.type)}`}>
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full ${getNoteTypeColor(
+                        note.type
+                      )}`}
+                    >
                       {getNoteTypeLabel(note.type)}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatDate(note.createdAt)}
-                      {note.updatedAt !== note.createdAt && ' (edited)'}
+                      {note.updatedAt !== note.createdAt && " (edited)"}
                     </span>
                   </div>
                   {editingNote === note.id ? (
@@ -298,7 +329,9 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                    <p className="text-sm whitespace-pre-wrap">
+                      {note.content}
+                    </p>
                   )}
                 </div>
                 {editingNote !== note.id && (
@@ -329,7 +362,8 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({ contractId, analysisVersi
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Delete Note</h3>
             <p className="text-muted-foreground mb-6">
-              Are you sure you want to delete this note? This action cannot be undone.
+              Are you sure you want to delete this note? This action cannot be
+              undone.
             </p>
             <div className="flex justify-end gap-3">
               <button

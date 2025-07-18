@@ -51,7 +51,7 @@ const ContractModal: React.FC<ContractModalProps> = ({
       setError(null);
 
       const response = await fetch(
-        `http://localhost:3001/api/contracts/${contractId}`
+        `http://spicymini:3001/api/contracts/${contractId}`
       );
 
       if (!response.ok) {
@@ -146,9 +146,12 @@ const ContractModal: React.FC<ContractModalProps> = ({
               <div className="text-center">
                 <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg mb-2">Contract not saved yet</p>
-                <p className="text-sm mb-4">This contract needs to be saved before viewing details</p>
+                <p className="text-sm mb-4">
+                  This contract needs to be saved before viewing details
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Click the "Save" button in the search results to save this contract first
+                  Click the "Save" button in the search results to save this
+                  contract first
                 </p>
                 <button
                   onClick={onClose}

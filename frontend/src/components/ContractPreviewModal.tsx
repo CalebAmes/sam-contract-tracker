@@ -33,7 +33,9 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "attachments">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "attachments">(
+    "details"
+  );
 
   useEffect(() => {
     if (isOpen && opportunityId) {
@@ -48,7 +50,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
       setSaved(false);
 
       const response = await fetch(
-        `http://localhost:3001/api/preview-contract-client`,
+        `http://spicymini:3001/api/preview-contract-client`,
         {
           method: "POST",
           headers: {
@@ -67,7 +69,9 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
       const data = await response.json();
       setContract(data.contract);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch contract preview");
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch contract preview"
+      );
     } finally {
       setLoading(false);
     }
@@ -81,7 +85,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
       setError(null);
 
       const response = await fetch(
-        `http://localhost:3001/api/fetch-contract-client`,
+        `http://spicymini:3001/api/fetch-contract-client`,
         {
           method: "POST",
           headers: {
@@ -99,11 +103,11 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
 
       const data = await response.json();
       setSaved(true);
-      
+
       if (onSave) {
         onSave(data.contract);
       }
-      
+
       console.log(`Contract ${opportunityId} saved successfully`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save contract");
@@ -152,15 +156,15 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
   const handleDownload = (url: string) => {
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   };
 
   if (!isOpen) return null;
@@ -194,7 +198,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
                 className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save to Database'}
+                {saving ? "Saving..." : "Save to Database"}
               </button>
             )}
             <button
@@ -355,14 +359,16 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
                           <div>
                             <h4 className="font-semibold mb-2">NAICS Codes</h4>
                             <div className="flex flex-wrap gap-1">
-                              {contract.naicsCodes.map((code: string, index: number) => (
-                                <span
-                                  key={index}
-                                  className="px-2 py-1 bg-muted text-muted-foreground rounded text-sm"
-                                >
-                                  {code}
-                                </span>
-                              ))}
+                              {contract.naicsCodes.map(
+                                (code: string, index: number) => (
+                                  <span
+                                    key={index}
+                                    className="px-2 py-1 bg-muted text-muted-foreground rounded text-sm"
+                                  >
+                                    {code}
+                                  </span>
+                                )
+                              )}
                             </div>
                           </div>
                         )}
@@ -388,10 +394,12 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
                         Description
                       </h4>
                       <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
-                        <div 
+                        <div
                           className="text-muted-foreground prose prose-sm max-w-none dark:prose-invert [&_p]:mb-4 [&_ul]:mb-4 [&_ol]:mb-4 [&_li]:mb-2 [&_br]:mb-2"
-                          dangerouslySetInnerHTML={{ 
-                            __html: contract.description || "No description available" 
+                          dangerouslySetInnerHTML={{
+                            __html:
+                              contract.description ||
+                              "No description available",
                           }}
                         />
                       </div>
@@ -401,7 +409,8 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
 
                 {activeTab === "attachments" && (
                   <div className="space-y-4">
-                    {!contract.attachments || contract.attachments.length === 0 ? (
+                    {!contract.attachments ||
+                    contract.attachments.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
                         <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
                         <p className="text-lg mb-2">No attachments</p>
@@ -415,9 +424,11 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
                             className="flex items-center gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                           >
                             <FileText className="w-5 h-5 text-muted-foreground" />
-                            
+
                             <div className="flex-1 min-w-0">
-                              <h5 className="font-medium truncate">{attachment.name}</h5>
+                              <h5 className="font-medium truncate">
+                                {attachment.name}
+                              </h5>
                               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                 <span>{attachment.type}</span>
                                 {attachment.size && (
@@ -425,7 +436,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
                                 )}
                               </div>
                             </div>
-                            
+
                             <button
                               onClick={() => handleDownload(attachment.url)}
                               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"

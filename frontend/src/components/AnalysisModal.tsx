@@ -56,7 +56,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   const [documentCount, setDocumentCount] = useState(0);
   const [processedDocuments, setProcessedDocuments] = useState(0);
   const [bypassAttachments, setBypassAttachments] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<GeminiModel>('2.0-flash');
+  const [selectedModel, setSelectedModel] = useState<GeminiModel>("2.0-flash");
 
   useEffect(() => {
     if (isOpen) {
@@ -73,7 +73,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
       setDocumentCount(0);
       setProcessedDocuments(0);
       setBypassAttachments(false);
-      setSelectedModel('2.0-flash');
+      setSelectedModel("2.0-flash");
     }
   }, [isOpen, contract.analysisStatus]);
 
@@ -120,7 +120,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     try {
       // Fetch contract status
       const contractResponse = await fetch(
-        `http://localhost:3001/api/contracts/${contract.id}`
+        `http://spicymini:3001/api/contracts/${contract.id}`
       );
       if (!contractResponse.ok) throw new Error("Failed to fetch status");
 
@@ -129,7 +129,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
       // Fetch progress data
       const progressResponse = await fetch(
-        `http://localhost:3001/api/contracts/${contract.id}/analysis-progress`
+        `http://spicymini:3001/api/contracts/${contract.id}/analysis-progress`
       );
       if (progressResponse.ok) {
         const progressData = await progressResponse.json();
@@ -178,7 +178,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     try {
       // Start the analysis process
       const response = await fetch(
-        `http://localhost:3001/api/contracts/${contract.id}/analyze`,
+        `http://spicymini:3001/api/contracts/${contract.id}/analyze`,
         {
           method: "POST",
           headers: {
@@ -389,7 +389,9 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
                   Attachment Download Settings
                 </h4>
                 <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
-                  SAM.gov attachments will be downloaded for analysis. If downloads fail, toggle this option to use only uploaded documents.
+                  SAM.gov attachments will be downloaded for analysis. If
+                  downloads fail, toggle this option to use only uploaded
+                  documents.
                 </p>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -443,7 +445,8 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
               Attachment Downloads Bypassed
             </h4>
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Only uploaded documents will be used for analysis. SAM.gov attachments will be ignored.
+              Only uploaded documents will be used for analysis. SAM.gov
+              attachments will be ignored.
             </p>
           </div>
         )}

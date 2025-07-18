@@ -1,33 +1,38 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  ExternalLink, 
-  Eye, 
-  ChevronDown, 
+import React, { useState, useEffect } from "react";
+import {
+  Calendar,
+  ExternalLink,
+  Eye,
+  ChevronDown,
   ChevronUp,
   Search,
   FileText,
-  Archive
-} from 'lucide-react';
-import { Contract, ContractStatus, AnalysisStatus, ContractPriority } from '../types';
-import StatusBadge from './StatusBadge';
-import ContractPriorityComponent from './ContractPriority';
+  Archive,
+} from "lucide-react";
+import {
+  Contract,
+  ContractStatus,
+  AnalysisStatus,
+  ContractPriority,
+} from "../types";
+import StatusBadge from "./StatusBadge";
+import ContractPriorityComponent from "./ContractPriority";
 
 interface ContractsTableProps {
   onContractClick: (contractId: string) => void;
   onOpenAnalysisModal?: (contractId: string) => void;
 }
 
-const ContractsTable: React.FC<ContractsTableProps> = ({ 
-  onContractClick, 
-  onOpenAnalysisModal 
+const ContractsTable: React.FC<ContractsTableProps> = ({
+  onContractClick,
+  onOpenAnalysisModal,
 }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<keyof Contract>('createdAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState<keyof Contract>("createdAt");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
@@ -37,16 +42,18 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   const fetchContracts = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/contracts');
-      
+      const response = await fetch("http://spicymini:3001/api/contracts");
+
       if (!response.ok) {
         throw new Error(`Failed to fetch contracts: ${response.status}`);
       }
-      
+
       const data = await response.json();
       setContracts(data.contracts || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch contracts');
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch contracts"
+      );
     } finally {
       setLoading(false);
     }
@@ -54,15 +61,15 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
 
   const handleSort = (field: keyof Contract) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection("desc");
     }
   };
 
   const sortedAndFilteredContracts = contracts
-    .filter(contract => {
+    .filter((contract) => {
       // Archive filter - show only archived OR non-archived
       if (showArchived && !contract.isArchived) {
         return false;
@@ -70,34 +77,38 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
       if (!showArchived && contract.isArchived) {
         return false;
       }
-      
+
       // Search filter
-      return contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contract.organizationId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contract.description.toLowerCase().includes(searchTerm.toLowerCase());
+      return (
+        contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contract.organizationId
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        contract.description.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     })
     .sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
-      
+
       // Special handling for aiAnalysis (wrapper score)
-      if (sortField === 'aiAnalysis') {
+      if (sortField === "aiAnalysis") {
         aValue = a.aiAnalysis?.wrapperScore ?? -1;
         bValue = b.aiAnalysis?.wrapperScore ?? -1;
       }
-      
+
       // Handle undefined values
-      if (aValue === undefined) aValue = '';
-      if (bValue === undefined) bValue = '';
-      
-      if (typeof aValue === 'string') {
+      if (aValue === undefined) aValue = "";
+      if (bValue === undefined) bValue = "";
+
+      if (typeof aValue === "string") {
         aValue = aValue.toLowerCase();
       }
-      if (typeof bValue === 'string') {
+      if (typeof bValue === "string") {
         bValue = bValue.toLowerCase();
       }
-      
-      if (sortDirection === 'asc') {
+
+      if (sortDirection === "asc") {
         return aValue > bValue ? 1 : -1;
       } else {
         return aValue < bValue ? 1 : -1;
@@ -106,7 +117,11 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
 
   const SortIcon = ({ field }: { field: keyof Contract }) => {
     if (sortField !== field) return null;
-    return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
+    return sortDirection === "asc" ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
   };
 
   const formatDate = (dateString: string) => {
@@ -118,28 +133,36 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
     const now = new Date();
     const diffTime = deadline.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) {
       return <span className="text-red-600 dark:text-red-400">Expired</span>;
     } else if (diffDays === 0) {
       return <span className="text-red-600 dark:text-red-400">Due Today</span>;
     } else if (diffDays <= 7) {
-      return <span className="text-yellow-600 dark:text-yellow-400">{diffDays} days</span>;
+      return (
+        <span className="text-yellow-600 dark:text-yellow-400">
+          {diffDays} days
+        </span>
+      );
     } else {
-      return <span className="text-green-600 dark:text-green-400">{diffDays} days</span>;
+      return (
+        <span className="text-green-600 dark:text-green-400">
+          {diffDays} days
+        </span>
+      );
     }
   };
 
   const getWrapperScoreColor = (score: number) => {
-    if (score >= 70) return 'text-red-600 dark:text-red-400';
-    if (score >= 40) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-green-600 dark:text-green-400';
+    if (score >= 70) return "text-red-600 dark:text-red-400";
+    if (score >= 40) return "text-yellow-600 dark:text-yellow-400";
+    return "text-green-600 dark:text-green-400";
   };
 
   const getWrapperScoreBackground = (score: number) => {
-    if (score >= 70) return 'bg-red-100 dark:bg-red-900/20';
-    if (score >= 40) return 'bg-yellow-100 dark:bg-yellow-900/20';
-    return 'bg-green-100 dark:bg-green-900/20';
+    if (score >= 70) return "bg-red-100 dark:bg-red-900/20";
+    if (score >= 40) return "bg-yellow-100 dark:bg-yellow-900/20";
+    return "bg-green-100 dark:bg-green-900/20";
   };
 
   if (loading) {
@@ -160,7 +183,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
           <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
           <p className="text-lg mb-2">Error loading contracts</p>
           <p className="text-sm">{error}</p>
-          <button 
+          <button
             onClick={fetchContracts}
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
@@ -197,15 +220,15 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
             className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-input text-foreground focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
-        
+
         {/* Archive filter toggle */}
         <div className="flex items-center border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => setShowArchived(false)}
             className={`px-3 py-2 text-sm font-medium transition-colors ${
               !showArchived
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-transparent text-muted-foreground hover:bg-muted'
+                ? "bg-primary text-primary-foreground"
+                : "bg-transparent text-muted-foreground hover:bg-muted"
             }`}
           >
             Active
@@ -214,17 +237,18 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
             onClick={() => setShowArchived(true)}
             className={`px-3 py-2 text-sm font-medium transition-colors flex items-center gap-2 ${
               showArchived
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-transparent text-muted-foreground hover:bg-muted'
+                ? "bg-primary text-primary-foreground"
+                : "bg-transparent text-muted-foreground hover:bg-muted"
             }`}
           >
             <Archive className="w-4 h-4" />
             Archived
           </button>
         </div>
-        
+
         <div className="text-sm text-muted-foreground">
-          {sortedAndFilteredContracts.length} contract{sortedAndFilteredContracts.length !== 1 ? 's' : ''}
+          {sortedAndFilteredContracts.length} contract
+          {sortedAndFilteredContracts.length !== 1 ? "s" : ""}
         </div>
       </div>
 
@@ -236,7 +260,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
               <tr className="border-b border-border bg-muted/50">
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('title')}
+                    onClick={() => handleSort("title")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Title <SortIcon field="title" />
@@ -244,7 +268,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('priority')}
+                    onClick={() => handleSort("priority")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Priority <SortIcon field="priority" />
@@ -252,7 +276,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('postedDate')}
+                    onClick={() => handleSort("postedDate")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Posted <SortIcon field="postedDate" />
@@ -260,7 +284,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('deadline')}
+                    onClick={() => handleSort("deadline")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Deadline <SortIcon field="deadline" />
@@ -268,7 +292,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('status')}
+                    onClick={() => handleSort("status")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Status <SortIcon field="status" />
@@ -276,7 +300,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('aiAnalysis')}
+                    onClick={() => handleSort("aiAnalysis")}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
                     Score <SortIcon field="aiAnalysis" />
@@ -299,14 +323,17 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {contract.solicitationNumber && (
-                          <span className="mr-2">#{contract.solicitationNumber}</span>
-                        )}
-                        {contract.viewCount !== undefined && contract.viewCount > 0 && (
-                          <span className="inline-flex items-center gap-1">
-                            <Eye className="w-3 h-3" />
-                            {contract.viewCount}
+                          <span className="mr-2">
+                            #{contract.solicitationNumber}
                           </span>
                         )}
+                        {contract.viewCount !== undefined &&
+                          contract.viewCount > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                              <Eye className="w-3 h-3" />
+                              {contract.viewCount}
+                            </span>
+                          )}
                       </div>
                     </div>
                   </td>
@@ -335,12 +362,20 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                     </div>
                   </td>
                   <td className="p-4">
-                    <StatusBadge status={contract.status} type="contract" size="sm" />
+                    <StatusBadge
+                      status={contract.status}
+                      type="contract"
+                      size="sm"
+                    />
                   </td>
                   <td className="p-4">
                     {contract.aiAnalysis ? (
                       <div
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getWrapperScoreBackground(contract.aiAnalysis.wrapperScore)} ${getWrapperScoreColor(contract.aiAnalysis.wrapperScore)}`}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getWrapperScoreBackground(
+                          contract.aiAnalysis.wrapperScore
+                        )} ${getWrapperScoreColor(
+                          contract.aiAnalysis.wrapperScore
+                        )}`}
                       >
                         {contract.aiAnalysis.wrapperScore}%
                       </div>

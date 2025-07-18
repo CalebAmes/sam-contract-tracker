@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import { 
-  Archive, 
-  ArchiveRestore, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
+import React, { useState } from "react";
+import {
+  Archive,
+  ArchiveRestore,
+  MoreVertical,
+  Edit,
+  Trash2,
   ExternalLink,
   Eye,
-  EyeOff
-} from 'lucide-react';
-import { Contract, ContractStatus } from '../types';
+  EyeOff,
+} from "lucide-react";
+import { Contract, ContractStatus } from "../types";
 
 interface ContractActionsProps {
   contract: Contract;
@@ -22,22 +22,25 @@ const ContractActions: React.FC<ContractActionsProps> = ({
   contract,
   onContractUpdate,
   onContractDelete,
-  showAll = false
+  showAll = false,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleArchive = async () => {
-    setLoading('archive');
-    
+    setLoading("archive");
+
     try {
-      const endpoint = contract.isArchived ? 'unarchive' : 'archive';
-      const response = await fetch(`http://localhost:3001/api/contracts/${contract.id}/${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const endpoint = contract.isArchived ? "unarchive" : "archive";
+      const response = await fetch(
+        `http://spicymini:3001/api/contracts/${contract.id}/${endpoint}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to ${endpoint} contract: ${response.status}`);
@@ -45,10 +48,10 @@ const ContractActions: React.FC<ContractActionsProps> = ({
 
       onContractUpdate({
         isArchived: !contract.isArchived,
-        archivedAt: contract.isArchived ? undefined : new Date().toISOString()
+        archivedAt: contract.isArchived ? undefined : new Date().toISOString(),
       });
     } catch (error) {
-      console.error('Error archiving contract:', error);
+      console.error("Error archiving contract:", error);
     } finally {
       setLoading(null);
       setShowMenu(false);
@@ -56,16 +59,19 @@ const ContractActions: React.FC<ContractActionsProps> = ({
   };
 
   const handleStatusChange = async (newStatus: ContractStatus) => {
-    setLoading('status');
-    
+    setLoading("status");
+
     try {
-      const response = await fetch(`http://localhost:3001/api/contracts/${contract.id}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const response = await fetch(
+        `http://spicymini:3001/api/contracts/${contract.id}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to update status: ${response.status}`);
@@ -73,7 +79,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
 
       onContractUpdate({ status: newStatus });
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error("Error updating status:", error);
     } finally {
       setLoading(null);
       setShowMenu(false);
@@ -81,16 +87,23 @@ const ContractActions: React.FC<ContractActionsProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this contract? This action cannot be undone.')) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this contract? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
-    setLoading('delete');
-    
+    setLoading("delete");
+
     try {
-      const response = await fetch(`http://localhost:3001/api/contracts/${contract.id}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `http://spicymini:3001/api/contracts/${contract.id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to delete contract: ${response.status}`);
@@ -100,7 +113,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
         onContractDelete(contract.id);
       }
     } catch (error) {
-      console.error('Error deleting contract:', error);
+      console.error("Error deleting contract:", error);
     } finally {
       setLoading(null);
       setShowMenu(false);
@@ -108,11 +121,11 @@ const ContractActions: React.FC<ContractActionsProps> = ({
   };
 
   const statusOptions = [
-    { value: ContractStatus.NEW, label: 'New' },
-    { value: ContractStatus.INVESTIGATING, label: 'Investigating' },
-    { value: ContractStatus.INTERESTED, label: 'Interested' },
-    { value: ContractStatus.DISMISSED, label: 'Dismissed' },
-    { value: ContractStatus.APPLIED, label: 'Applied' },
+    { value: ContractStatus.NEW, label: "New" },
+    { value: ContractStatus.INVESTIGATING, label: "Investigating" },
+    { value: ContractStatus.INTERESTED, label: "Interested" },
+    { value: ContractStatus.DISMISSED, label: "Dismissed" },
+    { value: ContractStatus.APPLIED, label: "Applied" },
   ];
 
   if (showAll) {
@@ -137,15 +150,19 @@ const ContractActions: React.FC<ContractActionsProps> = ({
                 <button
                   key={status.value}
                   onClick={() => handleStatusChange(status.value)}
-                  disabled={loading !== null || contract.status === status.value}
+                  disabled={
+                    loading !== null || contract.status === status.value
+                  }
                   className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-muted transition-colors text-left disabled:opacity-50 ${
-                    contract.status === status.value ? 'bg-muted' : ''
+                    contract.status === status.value ? "bg-muted" : ""
                   }`}
                 >
                   <div className="w-2 h-2 rounded-full bg-current"></div>
                   {status.label}
                   {contract.status === status.value && (
-                    <span className="ml-auto text-xs text-muted-foreground">(current)</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      (current)
+                    </span>
                   )}
                 </button>
               ))}
@@ -158,14 +175,14 @@ const ContractActions: React.FC<ContractActionsProps> = ({
                 disabled={loading !== null}
                 className="w-full flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-muted transition-colors text-left"
               >
-                {loading === 'archive' ? (
+                {loading === "archive" ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
                 ) : contract.isArchived ? (
                   <ArchiveRestore className="w-4 h-4" />
                 ) : (
                   <Archive className="w-4 h-4" />
                 )}
-                {contract.isArchived ? 'Unarchive' : 'Archive'}
+                {contract.isArchived ? "Unarchive" : "Archive"}
               </button>
 
               {/* External link */}
@@ -188,7 +205,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
                     disabled={loading !== null}
                     className="w-full flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-muted transition-colors text-left text-red-600 dark:text-red-400"
                   >
-                    {loading === 'delete' ? (
+                    {loading === "delete" ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
                     ) : (
                       <Trash2 className="w-4 h-4" />
@@ -210,16 +227,16 @@ const ContractActions: React.FC<ContractActionsProps> = ({
       onClick={handleArchive}
       disabled={loading !== null}
       className="inline-flex items-center gap-1 px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800 disabled:opacity-50"
-      title={contract.isArchived ? 'Unarchive contract' : 'Archive contract'}
+      title={contract.isArchived ? "Unarchive contract" : "Archive contract"}
     >
-      {loading === 'archive' ? (
+      {loading === "archive" ? (
         <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
       ) : contract.isArchived ? (
         <ArchiveRestore className="w-4 h-4" />
       ) : (
         <Archive className="w-4 h-4" />
       )}
-      {contract.isArchived ? 'Unarchive' : 'Archive'}
+      {contract.isArchived ? "Unarchive" : "Archive"}
     </button>
   );
 };

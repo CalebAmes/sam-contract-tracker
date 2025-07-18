@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, X, File, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useCallback } from "react";
+import { Upload, X, File, AlertCircle, CheckCircle } from "lucide-react";
 
 interface UploadedFile {
   id: string;
@@ -7,7 +7,7 @@ interface UploadedFile {
   name: string;
   size: number;
   type: string;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: "pending" | "uploading" | "success" | "error";
   progress: number;
   error?: string;
 }
@@ -25,99 +25,105 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   onFilesUploaded,
   onRemoveFile,
   uploadedFiles,
-  disabled = false
+  disabled = false,
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   const acceptedFileTypes = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain'
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
   ];
 
   const maxFileSize = 1024 * 1024 * 1024; // 1GB
 
   const validateFile = (file: File): string | null => {
     if (!acceptedFileTypes.includes(file.type)) {
-      return 'Only PDF, DOC, DOCX, XLSX, and TXT files are allowed';
+      return "Only PDF, DOC, DOCX, XLSX, and TXT files are allowed";
     }
     if (file.size > maxFileSize) {
-      return 'File size must be less than 1GB';
+      return "File size must be less than 1GB";
     }
     return null;
   };
 
-  const handleFiles = useCallback(async (files: FileList) => {
-    if (disabled) return;
+  const handleFiles = useCallback(
+    async (files: FileList) => {
+      if (disabled) return;
 
-    const validFiles: UploadedFile[] = [];
-    const errors: string[] = [];
+      const validFiles: UploadedFile[] = [];
+      const errors: string[] = [];
 
-    Array.from(files).forEach((file) => {
-      const error = validateFile(file);
-      if (error) {
-        errors.push(`${file.name}: ${error}`);
-      } else {
-        validFiles.push({
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          file,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          status: 'pending',
-          progress: 0
-        });
+      Array.from(files).forEach((file) => {
+        const error = validateFile(file);
+        if (error) {
+          errors.push(`${file.name}: ${error}`);
+        } else {
+          validFiles.push({
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            file,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            status: "pending",
+            progress: 0,
+          });
+        }
+      });
+
+      if (errors.length > 0) {
+        // TODO: Show error notifications
+        console.error("File validation errors:", errors);
       }
-    });
 
-    if (errors.length > 0) {
-      // TODO: Show error notifications
-      console.error('File validation errors:', errors);
-    }
-
-    if (validFiles.length > 0) {
-      await uploadFiles(validFiles);
-    }
-  }, [disabled, contractId]);
+      if (validFiles.length > 0) {
+        await uploadFiles(validFiles);
+      }
+    },
+    [disabled, contractId]
+  );
 
   const uploadFiles = async (files: UploadedFile[]) => {
     setIsUploading(true);
-    
+
     try {
       const uploadPromises = files.map(async (fileData) => {
         const formData = new FormData();
-        formData.append('document', fileData.file);
-        
+        formData.append("document", fileData.file);
+
         // Update file status to uploading
-        const updatedFile = { ...fileData, status: 'uploading' as const };
+        const updatedFile = { ...fileData, status: "uploading" as const };
         onFilesUploaded([...uploadedFiles, updatedFile]);
 
         try {
-          const response = await fetch(`http://localhost:3001/api/contracts/${contractId}/upload-documents`, {
-            method: 'POST',
-            body: formData,
-            // Note: Don't set Content-Type header for FormData, let browser set it
-          });
+          const response = await fetch(
+            `http://spicymini:3001/api/contracts/${contractId}/upload-documents`,
+            {
+              method: "POST",
+              body: formData,
+              // Note: Don't set Content-Type header for FormData, let browser set it
+            }
+          );
 
           if (!response.ok) {
             throw new Error(`Upload failed: ${response.status}`);
           }
 
           const result = await response.json();
-          
+
           return {
             ...fileData,
-            status: 'success' as const,
-            progress: 100
+            status: "success" as const,
+            progress: 100,
           };
         } catch (error) {
           return {
             ...fileData,
-            status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Upload failed'
+            status: "error" as const,
+            error: error instanceof Error ? error.message : "Upload failed",
           };
         }
       });
@@ -125,7 +131,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
       const results = await Promise.all(uploadPromises);
       onFilesUploaded([...uploadedFiles, ...results]);
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error("Upload error:", error);
     } finally {
       setIsUploading(false);
     }
@@ -134,53 +140,61 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
+    if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true);
-    } else if (e.type === 'dragleave') {
+    } else if (e.type === "dragleave") {
       setDragActive(false);
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
-    }
-  }, [handleFiles]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFiles(e.target.files);
-    }
-  }, [handleFiles]);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files);
+      }
+    },
+    [handleFiles]
+  );
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFiles(e.target.files);
+      }
+    },
+    [handleFiles]
+  );
 
   const getFileIcon = (type: string) => {
-    if (type === 'application/pdf') return '📄';
-    if (type.includes('word')) return '📝';
-    if (type.includes('spreadsheet')) return '📊';
-    if (type === 'text/plain') return '📄';
-    return '📄';
+    if (type === "application/pdf") return "📄";
+    if (type.includes("word")) return "📝";
+    if (type.includes("spreadsheet")) return "📊";
+    if (type === "text/plain") return "📄";
+    return "📄";
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const getStatusIcon = (status: UploadedFile['status']) => {
+  const getStatusIcon = (status: UploadedFile["status"]) => {
     switch (status) {
-      case 'success':
+      case "success":
         return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'error':
+      case "error":
         return <AlertCircle className="w-4 h-4 text-red-500" />;
-      case 'uploading':
-        return <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />;
+      case "uploading":
+        return (
+          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        );
       default:
         return <File className="w-4 h-4 text-gray-500" />;
     }
@@ -192,9 +206,11 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
       <div
         className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           dragActive
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-            : 'border-gray-300 dark:border-gray-600'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-400'}`}
+            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+            : "border-gray-300 dark:border-gray-600"
+        } ${
+          disabled ? "opacity-50 cursor-not-allowed" : "hover:border-gray-400"
+        }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -208,12 +224,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           disabled={disabled}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
         />
-        
+
         <div className="space-y-2">
           <Upload className="w-12 h-12 mx-auto text-gray-400" />
           <div>
             <p className="text-lg font-medium">
-              {dragActive ? 'Drop files here' : 'Drag & drop files here'}
+              {dragActive ? "Drop files here" : "Drag & drop files here"}
             </p>
             <p className="text-sm text-muted-foreground">
               or click to select files
@@ -244,16 +260,18 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                     <p className="font-medium text-sm">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatFileSize(file.size)}
-                      {file.status === 'error' && file.error && (
-                        <span className="text-red-500 ml-2">- {file.error}</span>
+                      {file.status === "error" && file.error && (
+                        <span className="text-red-500 ml-2">
+                          - {file.error}
+                        </span>
                       )}
                     </p>
                   </div>
                 </div>
-                
+
                 <button
                   onClick={() => onRemoveFile(file.id)}
-                  disabled={disabled || file.status === 'uploading'}
+                  disabled={disabled || file.status === "uploading"}
                   className="p-1 text-red-500 hover:text-red-700 disabled:opacity-50"
                 >
                   <X className="w-4 h-4" />

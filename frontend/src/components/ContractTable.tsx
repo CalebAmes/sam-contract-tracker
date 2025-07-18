@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ExternalLink, Calendar, Building, Save, Check } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { ExternalLink, Calendar, Building, Save, Check } from "lucide-react";
 
 interface Contract {
   id: string;
@@ -22,9 +22,16 @@ interface ContractTableProps {
   loading?: boolean;
 }
 
-export default function ContractTable({ contracts, onStatusChange, onContractClick, loading }: ContractTableProps) {
+export default function ContractTable({
+  contracts,
+  onStatusChange,
+  onContractClick,
+  loading,
+}: ContractTableProps) {
   const [savedContracts, setSavedContracts] = useState<Set<string>>(new Set());
-  const [savingContracts, setSavingContracts] = useState<Set<string>>(new Set());
+  const [savingContracts, setSavingContracts] = useState<Set<string>>(
+    new Set()
+  );
 
   // Check which contracts are already saved in the database
   useEffect(() => {
@@ -35,22 +42,27 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
 
   const checkSavedContracts = async () => {
     try {
-      const contractIds = contracts.map(c => c.id);
-      const response = await fetch('http://localhost:3001/api/contracts/check-in-database', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contractIds }),
-      });
+      const contractIds = contracts.map((c) => c.id);
+      const response = await fetch(
+        "http://spicymini:3001/api/contracts/check-in-database",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ contractIds }),
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
-        const savedIds = Object.keys(data.results).filter(id => data.results[id]);
+        const savedIds = Object.keys(data.results).filter(
+          (id) => data.results[id]
+        );
         setSavedContracts(new Set(savedIds));
       }
     } catch (error) {
-      console.error('Error checking saved contracts:', error);
+      console.error("Error checking saved contracts:", error);
     }
   };
 
@@ -59,30 +71,33 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
       return;
     }
 
-    setSavingContracts(prev => new Set(prev).add(contract.id));
+    setSavingContracts((prev) => new Set(prev).add(contract.id));
 
     try {
       // Use the existing client API endpoint to fetch full contract details
-      const response = await fetch('http://localhost:3001/api/fetch-contract-client', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          opportunityId: contract.id,
-        }),
-      });
+      const response = await fetch(
+        "http://spicymini:3001/api/fetch-contract-client",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            opportunityId: contract.id,
+          }),
+        }
+      );
 
       if (response.ok) {
-        setSavedContracts(prev => new Set(prev).add(contract.id));
+        setSavedContracts((prev) => new Set(prev).add(contract.id));
         console.log(`Contract ${contract.id} saved successfully`);
       } else {
-        console.error('Failed to save contract:', response.status);
+        console.error("Failed to save contract:", response.status);
       }
     } catch (error) {
-      console.error('Error saving contract:', error);
+      console.error("Error saving contract:", error);
     } finally {
-      setSavingContracts(prev => {
+      setSavingContracts((prev) => {
         const newSet = new Set(prev);
         newSet.delete(contract.id);
         return newSet;
@@ -92,7 +107,10 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
 
   const handleRowClick = (contractId: string, event: React.MouseEvent) => {
     // Don't open modal if clicking on buttons or links
-    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('a')) {
+    if (
+      (event.target as HTMLElement).closest("button") ||
+      (event.target as HTMLElement).closest("a")
+    ) {
       return;
     }
     onContractClick(contractId);
@@ -132,7 +150,6 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
     }
   };
 
-
   return (
     <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
       <div className="p-4 border-b border-border">
@@ -140,28 +157,36 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
           Contract Opportunities ({contracts.length})
         </h3>
       </div>
-      
+
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-muted">
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium">Title</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">Posted</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">Deadline</th>
-              <th className="px-4 py-3 text-center text-sm font-medium">Actions</th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                Posted
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                Deadline
+              </th>
+              <th className="px-4 py-3 text-center text-sm font-medium">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {contracts.map((contract) => (
-              <tr 
-                key={contract.id} 
+              <tr
+                key={contract.id}
                 className="hover:bg-muted/50 cursor-pointer"
                 onClick={(e) => handleRowClick(contract.id, e)}
               >
                 <td className="px-4 py-4">
                   <div className="space-y-1">
                     <div className="flex items-start gap-2">
-                      <h4 className="font-medium text-sm leading-tight">{contract.title}</h4>
+                      <h4 className="font-medium text-sm leading-tight">
+                        {contract.title}
+                      </h4>
                       <a
                         href={contract.url}
                         target="_blank"
@@ -176,7 +201,8 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
                     </p>
                     {contract.attachments.length > 0 && (
                       <div className="text-xs text-blue-600 dark:text-blue-400">
-                        📎 {contract.attachments.length} attachment{contract.attachments.length !== 1 ? 's' : ''}
+                        📎 {contract.attachments.length} attachment
+                        {contract.attachments.length !== 1 ? "s" : ""}
                       </div>
                     )}
                   </div>
@@ -213,7 +239,9 @@ export default function ContractTable({ contracts, onStatusChange, onContractCli
                         title="Save contract"
                       >
                         <Save className="w-3 h-3" />
-                        {savingContracts.has(contract.id) ? 'Saving...' : 'Save'}
+                        {savingContracts.has(contract.id)
+                          ? "Saving..."
+                          : "Save"}
                       </button>
                     )}
                   </div>

@@ -119,7 +119,7 @@ const ContractFlags: React.FC<ContractFlagsProps> = ({
 
     try {
       const response = await fetch(
-        `http://localhost:3001/api/contracts/${contractId}/flags`,
+        `http://spicymini:3001/api/contracts/${contractId}/flags`,
         {
           method: "PUT",
           headers: {
@@ -148,7 +148,7 @@ const ContractFlags: React.FC<ContractFlagsProps> = ({
 
     try {
       const response = await fetch(
-        `http://localhost:3001/api/contracts/${contractId}/flags`,
+        `http://spicymini:3001/api/contracts/${contractId}/flags`,
         {
           method: "PUT",
           headers: {
