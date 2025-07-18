@@ -2,12 +2,12 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import DatabaseService from "./database";
-import { 
-  fetchSingle, 
-  fetchClientApi, 
+import {
+  fetchSingle,
+  fetchClientApi,
   previewContractClient,
-  getContracts, 
-  getContractById, 
+  getContracts,
+  getContractById,
   healthCheckHandler,
   updateContractStatus,
   updateContractFlags,
@@ -34,7 +34,7 @@ import {
   searchFromUrl,
   searchDirect,
   addContractsFromSearch,
-  checkContractsInDatabase
+  checkContractsInDatabase,
 } from "./routes";
 
 dotenv.config();
@@ -44,7 +44,7 @@ const PORT = process.env.PORT || 3001;
 const db = new DatabaseService();
 
 // Middleware
-app.use(cors());
+// app.use(cors());
 app.use(express.json());
 
 // Request logging middleware
@@ -119,6 +119,10 @@ app.listen(PORT, () => {
   const key2 = process.env.SAM_API_KEY_2;
   const key3 = process.env.SAM_API_KEY_3;
   const geminiKey = process.env.GEMINI_API_KEY;
-  console.log(`SAM API Keys configured: ${key1 ? "Key 1: Yes" : "Key 1: No"}, ${key2 ? "Key 2: Yes" : "Key 2: No"}, ${key3 ? "Key 3: Yes" : "Key 3: No"}`);
+  console.log(
+    `SAM API Keys configured: ${key1 ? "Key 1: Yes" : "Key 1: No"}, ${
+      key2 ? "Key 2: Yes" : "Key 2: No"
+    }, ${key3 ? "Key 3: Yes" : "Key 3: No"}`
+  );
   console.log(`Gemini API Key configured: ${geminiKey ? "Yes" : "No"}`);
 });
