@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, AlertCircle, CheckCircle } from 'lucide-react';
 import ContractTable from '../components/ContractTable';
+import ContractPreviewModal from '../components/ContractPreviewModal';
 
 interface Contract {
   id: string;
@@ -30,27 +31,107 @@ interface SearchResult {
 }
 
 export default function SearchSam() {
-  const [samUrl, setSamUrl] = useState('');
+  const [samUrl, setSamUrl] = useState(() => localStorage.getItem('samSearch_url') || '');
   const [isValidUrl, setIsValidUrl] = useState<boolean | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(() => {
+    const saved = localStorage.getItem('samSearch_results');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [error, setError] = useState<string | null>(null);
   
-  // Search form state
-  const [title, setTitle] = useState('');
-  const [ncode, setNcode] = useState('');
-  const [ccode, setCcode] = useState('');
-  const [setAsideType, setSetAsideType] = useState('');
-  const [noticeTypes, setNoticeTypes] = useState<string[]>([]);
-  const [organizationCode, setOrganizationCode] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
-  const [state, setState] = useState('');
-  const [zip, setZip] = useState('');
-  const [daysBack, setDaysBack] = useState('30');
-  const [responseFromDays, setResponseFromDays] = useState('');
-  const [responseToDays, setResponseToDays] = useState('');
+  // Search form state with localStorage persistence
+  const [title, setTitle] = useState(() => localStorage.getItem('samSearch_title') || '');
+  const [ncode, setNcode] = useState(() => localStorage.getItem('samSearch_ncode') || '');
+  const [ccode, setCcode] = useState(() => localStorage.getItem('samSearch_ccode') || '');
+  const [setAsideType, setSetAsideType] = useState(() => localStorage.getItem('samSearch_setAsideType') || '');
+  const [noticeTypes, setNoticeTypes] = useState<string[]>(() => {
+    const saved = localStorage.getItem('samSearch_noticeTypes');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [organizationCode, setOrganizationCode] = useState(() => localStorage.getItem('samSearch_organizationCode') || '');
+  const [organizationName, setOrganizationName] = useState(() => localStorage.getItem('samSearch_organizationName') || '');
+  const [state, setState] = useState(() => localStorage.getItem('samSearch_state') || '');
+  const [zip, setZip] = useState(() => localStorage.getItem('samSearch_zip') || '');
+  const [daysBack, setDaysBack] = useState(() => localStorage.getItem('samSearch_daysBack') || '30');
+  const [responseFromDays, setResponseFromDays] = useState(() => localStorage.getItem('samSearch_responseFromDays') || '');
+  const [responseToDays, setResponseToDays] = useState(() => localStorage.getItem('samSearch_responseToDays') || '');
   const [currentOffset, setCurrentOffset] = useState(0);
   const [lastSearchParams, setLastSearchParams] = useState<any>(null);
+  const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(() => localStorage.getItem('samSearch_pageSize') || '25');
+  const [currentPage, setCurrentPage] = useState(0);
+
+  // Save to localStorage whenever values change
+  useEffect(() => {
+    localStorage.setItem('samSearch_url', samUrl);
+  }, [samUrl]);
+
+  useEffect(() => {
+    if (searchResult) {
+      localStorage.setItem('samSearch_results', JSON.stringify(searchResult));
+    }
+  }, [searchResult]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_title', title);
+  }, [title]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_ncode', ncode);
+  }, [ncode]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_ccode', ccode);
+  }, [ccode]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_setAsideType', setAsideType);
+  }, [setAsideType]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_noticeTypes', JSON.stringify(noticeTypes));
+  }, [noticeTypes]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_organizationCode', organizationCode);
+  }, [organizationCode]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_organizationName', organizationName);
+  }, [organizationName]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_state', state);
+  }, [state]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_zip', zip);
+  }, [zip]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_daysBack', daysBack);
+  }, [daysBack]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_responseFromDays', responseFromDays);
+  }, [responseFromDays]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_responseToDays', responseToDays);
+  }, [responseToDays]);
+
+  useEffect(() => {
+    localStorage.setItem('samSearch_pageSize', pageSize);
+  }, [pageSize]);
+
+  // Validate URL on component mount if URL is loaded from localStorage
+  useEffect(() => {
+    if (samUrl) {
+      validateSamUrl(samUrl);
+    }
+  }, []);
 
   const validateSamUrl = (url: string) => {
     if (!url) {
@@ -200,32 +281,33 @@ export default function SearchSam() {
       fromDate.setDate(fromDate.getDate() - parseInt(daysBack));
       
       const searchParams: any = {
-        title: title || '',
-        ncode,
-        ccode,
-        typeOfSetAside: setAsideType,
-        ptype: noticeTypes.join(','),
-        organizationCode,
-        organizationName,
-        state,
-        zip,
-        postedFrom: fromDate.toISOString().split('T')[0],
-        postedTo: toDate.toISOString().split('T')[0],
-        maxResults: 100,
-        offset
+        q: title || '',
+        qMode: 'ALL',
+        naics: ncode ? ncode.split(',').map(n => n.trim()) : [],
+        notice_type: noticeTypes,
+        set_aside: setAsideType ? [setAsideType] : [],
+        is_active: true,
+        publishDate: {
+          gte: fromDate.toISOString().split('T')[0],
+          lte: toDate.toISOString().split('T')[0]
+        },
+        size: parseInt(pageSize),
+        page: Math.floor(offset / parseInt(pageSize)) || 0
       };
 
       // Add response deadline filters if specified
-      if (responseFromDays) {
-        const rdlFromDate = new Date();
-        rdlFromDate.setDate(rdlFromDate.getDate() + parseInt(responseFromDays));
-        searchParams.rdlfrom = rdlFromDate.toISOString().split('T')[0];
-      }
-      
-      if (responseToDays) {
-        const rdlToDate = new Date();
-        rdlToDate.setDate(rdlToDate.getDate() + parseInt(responseToDays));
-        searchParams.rdlto = rdlToDate.toISOString().split('T')[0];
+      if (responseFromDays || responseToDays) {
+        searchParams.responseDate = {};
+        if (responseFromDays) {
+          const rdlFromDate = new Date();
+          rdlFromDate.setDate(rdlFromDate.getDate() + parseInt(responseFromDays));
+          searchParams.responseDate.gte = rdlFromDate.toISOString().split('T')[0];
+        }
+        if (responseToDays) {
+          const rdlToDate = new Date();
+          rdlToDate.setDate(rdlToDate.getDate() + parseInt(responseToDays));
+          searchParams.responseDate.lte = rdlToDate.toISOString().split('T')[0];
+        }
       }
       
       // Save search params for pagination
@@ -237,7 +319,11 @@ export default function SearchSam() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(searchParams),
+        body: JSON.stringify({
+          filters: searchParams,
+          maxPages: 1,
+          delayMs: 2000
+        }),
       });
 
       if (!response.ok) {
@@ -301,6 +387,34 @@ export default function SearchSam() {
     }
   };
 
+  const handleContractClick = (contractId: string) => {
+    setSelectedContractId(contractId);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedContractId(null);
+  };
+
+  const handleSaveContract = async (contractData: any) => {
+    // Refresh the saved contracts state in ContractTable
+    if (searchResult) {
+      // Update the search results to show the contract as saved
+      setSearchResult(prev => prev ? {
+        ...prev,
+        contracts: prev.contracts.map(contract =>
+          contract.id === contractData.id
+            ? { ...contract, status: contractData.status }
+            : contract
+        )
+      } : prev);
+    }
+    
+    // Show success message
+    console.log('Contract saved successfully:', contractData.id);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -330,6 +444,26 @@ export default function SearchSam() {
               setResponseToDays('');
               setSamUrl('');
               setIsValidUrl(null);
+              setSearchResult(null);
+              setCurrentOffset(0);
+              setCurrentPage(0);
+              setPageSize('25');
+              
+              // Clear localStorage
+              localStorage.removeItem('samSearch_url');
+              localStorage.removeItem('samSearch_results');
+              localStorage.removeItem('samSearch_title');
+              localStorage.removeItem('samSearch_ncode');
+              localStorage.removeItem('samSearch_ccode');
+              localStorage.removeItem('samSearch_setAsideType');
+              localStorage.removeItem('samSearch_noticeTypes');
+              localStorage.removeItem('samSearch_organizationCode');
+              localStorage.removeItem('samSearch_organizationName');
+              localStorage.removeItem('samSearch_state');
+              localStorage.removeItem('samSearch_zip');
+              localStorage.removeItem('samSearch_responseFromDays');
+              localStorage.removeItem('samSearch_responseToDays');
+              localStorage.setItem('samSearch_daysBack', '30'); // Reset to default
             }}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -665,29 +799,77 @@ export default function SearchSam() {
             <h3 className="text-lg font-semibold font-heading">
               Search Results
             </h3>
-            <div className="text-sm text-muted-foreground">
-              Showing {searchResult.contracts.length} of {searchResult.totalFound} contracts • 
-              Searched at {new Date(searchResult.scrapedAt).toLocaleString()}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label htmlFor="pageSize" className="text-sm text-muted-foreground">
+                  Show:
+                </label>
+                <select
+                  id="pageSize"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(e.target.value);
+                    setCurrentOffset(0);
+                    setCurrentPage(0);
+                    // Re-run search with new page size
+                    if (lastSearchParams) {
+                      handleDirectSearch(0);
+                    }
+                  }}
+                  className="px-2 py-1 border border-border rounded bg-input text-foreground text-sm"
+                >
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Page {Math.floor(currentOffset / parseInt(pageSize)) + 1} of {Math.ceil(searchResult.totalFound / parseInt(pageSize))} • 
+                Total: {searchResult.totalFound} contracts
+              </div>
             </div>
           </div>
           <ContractTable 
             contracts={searchResult.contracts}
             onStatusChange={handleStatusChange}
+            onContractClick={handleContractClick}
             loading={isAnalyzing}
           />
           
-          {/* Load More Button */}
-          {searchResult.pagination?.hasMore && (
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={handleLoadMore}
-                disabled={isAnalyzing}
-                className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-6 rounded-lg transition-colors"
-              >
-                {isAnalyzing ? 'Loading...' : `Load More (${searchResult.totalFound - searchResult.contracts.length} remaining)`}
-              </button>
-            </div>
-          )}
+          {/* Pagination Controls */}
+          <div className="flex justify-center items-center gap-4 pt-4">
+            <button
+              onClick={() => {
+                const newOffset = Math.max(0, currentOffset - parseInt(pageSize));
+                setCurrentOffset(newOffset);
+                setCurrentPage(Math.floor(newOffset / parseInt(pageSize)));
+                handleDirectSearch(newOffset);
+              }}
+              disabled={currentOffset === 0 || isAnalyzing}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              Previous
+            </button>
+            
+            <span className="text-sm text-muted-foreground">
+              Page {Math.floor(currentOffset / parseInt(pageSize)) + 1} of {Math.ceil(searchResult.totalFound / parseInt(pageSize))}
+            </span>
+            
+            <button
+              onClick={() => {
+                const newOffset = currentOffset + parseInt(pageSize);
+                if (newOffset < searchResult.totalFound) {
+                  setCurrentOffset(newOffset);
+                  setCurrentPage(Math.floor(newOffset / parseInt(pageSize)));
+                  handleDirectSearch(newOffset);
+                }
+              }}
+              disabled={currentOffset + parseInt(pageSize) >= searchResult.totalFound || isAnalyzing}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 
@@ -700,6 +882,16 @@ export default function SearchSam() {
             <p>Paste a SAM.gov search URL above to get started</p>
           </div>
         </div>
+      )}
+
+      {/* Contract Preview Modal */}
+      {selectedContractId && (
+        <ContractPreviewModal
+          opportunityId={selectedContractId}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onSave={handleSaveContract}
+        />
       )}
     </div>
   );

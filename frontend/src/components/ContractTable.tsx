@@ -1,5 +1,5 @@
-import React from 'react';
-import { CheckCircle, Brain, Trash2, ExternalLink, Calendar, Building } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ExternalLink, Calendar, Building, Save, Check } from 'lucide-react';
 
 interface Contract {
   id: string;
@@ -18,10 +18,85 @@ interface Contract {
 interface ContractTableProps {
   contracts: Contract[];
   onStatusChange: (contractId: string, newStatus: string) => void;
+  onContractClick: (contractId: string) => void;
   loading?: boolean;
 }
 
-export default function ContractTable({ contracts, onStatusChange, loading }: ContractTableProps) {
+export default function ContractTable({ contracts, onStatusChange, onContractClick, loading }: ContractTableProps) {
+  const [savedContracts, setSavedContracts] = useState<Set<string>>(new Set());
+  const [savingContracts, setSavingContracts] = useState<Set<string>>(new Set());
+
+  // Check which contracts are already saved in the database
+  useEffect(() => {
+    if (contracts.length > 0) {
+      checkSavedContracts();
+    }
+  }, [contracts]);
+
+  const checkSavedContracts = async () => {
+    try {
+      const contractIds = contracts.map(c => c.id);
+      const response = await fetch('http://localhost:3001/api/contracts/check-in-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ contractIds }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const savedIds = Object.keys(data.results).filter(id => data.results[id]);
+        setSavedContracts(new Set(savedIds));
+      }
+    } catch (error) {
+      console.error('Error checking saved contracts:', error);
+    }
+  };
+
+  const handleSaveContract = async (contract: Contract) => {
+    if (savedContracts.has(contract.id) || savingContracts.has(contract.id)) {
+      return;
+    }
+
+    setSavingContracts(prev => new Set(prev).add(contract.id));
+
+    try {
+      // Use the existing client API endpoint to fetch full contract details
+      const response = await fetch('http://localhost:3001/api/fetch-contract-client', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityId: contract.id,
+        }),
+      });
+
+      if (response.ok) {
+        setSavedContracts(prev => new Set(prev).add(contract.id));
+        console.log(`Contract ${contract.id} saved successfully`);
+      } else {
+        console.error('Failed to save contract:', response.status);
+      }
+    } catch (error) {
+      console.error('Error saving contract:', error);
+    } finally {
+      setSavingContracts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(contract.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRowClick = (contractId: string, event: React.MouseEvent) => {
+    // Don't open modal if clicking on buttons or links
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('a')) {
+      return;
+    }
+    onContractClick(contractId);
+  };
   if (loading) {
     return (
       <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
@@ -57,11 +132,6 @@ export default function ContractTable({ contracts, onStatusChange, loading }: Co
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return 'text-green-600 dark:text-green-400';
-    if (score >= 40) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
-  };
 
   return (
     <div className="bg-card rounded-lg shadow-sm border border-border overflow-hidden">
@@ -78,13 +148,16 @@ export default function ContractTable({ contracts, onStatusChange, loading }: Co
               <th className="px-4 py-3 text-left text-sm font-medium">Title</th>
               <th className="px-4 py-3 text-left text-sm font-medium">Posted</th>
               <th className="px-4 py-3 text-left text-sm font-medium">Deadline</th>
-              <th className="px-4 py-3 text-center text-sm font-medium">Score</th>
               <th className="px-4 py-3 text-center text-sm font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {contracts.map((contract) => (
-              <tr key={contract.id} className="hover:bg-muted/50">
+              <tr 
+                key={contract.id} 
+                className="hover:bg-muted/50 cursor-pointer"
+                onClick={(e) => handleRowClick(contract.id, e)}
+              >
                 <td className="px-4 py-4">
                   <div className="space-y-1">
                     <div className="flex items-start gap-2">
@@ -120,37 +193,29 @@ export default function ContractTable({ contracts, onStatusChange, loading }: Co
                     {formatDate(contract.deadline)}
                   </div>
                 </td>
-                <td className="px-4 py-4 text-center">
-                  <span className={`text-sm font-medium ${getScoreColor(contract.aiScore)}`}>
-                    {contract.aiScore}%
-                  </span>
-                </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-center gap-1">
-                    <button
-                      onClick={() => onStatusChange(contract.id, 'pre-bid')}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:hover:bg-green-800 text-green-700 dark:text-green-300 rounded transition-colors"
-                      title="Move to Pre-Bid"
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      Pre-Bid
-                    </button>
-                    <button
-                      onClick={() => onStatusChange(contract.id, 'case-study')}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                      title="Mark as Case Study"
-                    >
-                      <Brain className="w-3 h-3" />
-                      Study
-                    </button>
-                    <button
-                      onClick={() => onStatusChange(contract.id, 'discarded')}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded transition-colors"
-                      title="Discard"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Discard
-                    </button>
+                    {/* Save Button */}
+                    {savedContracts.has(contract.id) ? (
+                      <button
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:hover:bg-green-800 text-green-700 dark:text-green-300 rounded transition-colors"
+                        title="Already saved"
+                        disabled
+                      >
+                        <Check className="w-3 h-3" />
+                        Saved
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSaveContract(contract)}
+                        disabled={savingContracts.has(contract.id)}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors disabled:opacity-50"
+                        title="Save contract"
+                      >
+                        <Save className="w-3 h-3" />
+                        {savingContracts.has(contract.id) ? 'Saving...' : 'Save'}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

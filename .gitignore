@@ -25,9 +25,10 @@
 .env.production.local
 
 # databases
-*.db
-*.sqlite
-*.sqlite3
+# we actually want this lol - just for simplicity
+# *.db
+# *.sqlite
+# *.sqlite3
 
 # logs
 npm-debug.log*

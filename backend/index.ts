@@ -5,6 +5,7 @@ import DatabaseService from "./database";
 import { 
   fetchSingle, 
   fetchClientApi, 
+  previewContractClient,
   getContracts, 
   getContractById, 
   healthCheckHandler,
@@ -29,7 +30,11 @@ import {
   getAnalysisNotes,
   addAnalysisNote,
   updateAnalysisNote,
-  deleteAnalysisNote
+  deleteAnalysisNote,
+  searchFromUrl,
+  searchDirect,
+  addContractsFromSearch,
+  checkContractsInDatabase
 } from "./routes";
 
 dotenv.config();
@@ -61,8 +66,15 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 // API Routes
 app.post("/api/fetch-contract", fetchSingle(db));
 app.post("/api/fetch-contract-client", fetchClientApi(db));
+app.post("/api/preview-contract-client", previewContractClient(db));
 app.get("/api/contracts", getContracts(db));
 app.get("/api/contracts/:id", getContractById(db));
+
+// Search routes
+app.post("/api/search", searchFromUrl(db));
+app.post("/api/search-direct", searchDirect(db));
+app.post("/api/contracts/add-from-search", addContractsFromSearch(db));
+app.post("/api/contracts/check-in-database", checkContractsInDatabase(db));
 app.post("/api/contracts/:id/fetch-attachments", fetchContractAttachments(db));
 app.post("/api/contracts/:id/upload-documents", ...uploadDocuments(db));
 app.post("/api/contracts/:id/analyze", analyzeContract(db));

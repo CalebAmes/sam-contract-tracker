@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import DatabaseService from "./database";
 import { fetchSingleOpportunity } from "./src/services/samApi";
 import { ClientApiParser } from "./src/services/clientApiParser";
+import SAMSearchService, { SearchFilters } from "./src/services/samSearch";
 import axios from "axios";
 import multer from "multer";
 import path from "path";
@@ -208,6 +209,99 @@ export const fetchClientApi =
       }
     }
   };
+
+// Preview contract from SAM.gov client API without saving to database
+export const previewContractClient = (db: DatabaseService) => async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  
+  try {
+    const { opportunityId } = req.body;
+
+    if (!opportunityId) {
+      console.error("400 - No opportunity ID provided");
+      return res.status(400).json({ error: "No opportunity ID provided" });
+    }
+
+    const clientApiUrl = `https://sam.gov/api/prod/opps/v2/opportunities/${opportunityId}`;
+    console.log(`Previewing from client API: ${clientApiUrl}`);
+
+    // Get session tokens from environment variables
+    const sessionTokens = {
+      session: process.env.CLIENT_API_SESSION,
+      xsrfToken: process.env.CLIENT_API_XSRF_TOKEN,
+      authToken: process.env.CLIENT_API_AUTH_TOKEN,
+      cookies: process.env.CLIENT_API_COOKIES,
+    };
+
+    const response = await axios.get(clientApiUrl, {
+      timeout: 30000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"macOS"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "referer": `https://sam.gov/opp/${opportunityId}/view`,
+        ...(sessionTokens.cookies && { "cookie": sessionTokens.cookies }),
+        ...(sessionTokens.authToken && { "x-auth-token": sessionTokens.authToken }),
+      },
+      params: {
+        random: Date.now(), // Add random parameter like the client does
+      },
+    });
+
+    if (response.status !== 200) {
+      console.error(`${response.status} - SAM.gov client API error`);
+      return res.status(response.status).json({ error: `SAM.gov client API returned ${response.status}` });
+    }
+
+    const apiResponse = response.data;
+    const fetchDurationMs = Date.now() - startTime;
+    console.log(`Successfully fetched from client API in ${fetchDurationMs}ms`);
+
+    // Validate the API response
+    if (!ClientApiParser.validateApiResponse(apiResponse)) {
+      console.error("Invalid API response structure");
+      return res.status(500).json({ error: "Invalid API response structure" });
+    }
+
+    // Parse the contract data
+    const parsedData = ClientApiParser.extractAllData(apiResponse, opportunityId, 'client-api', fetchDurationMs);
+    const contract = parsedData.contract;
+    const metadata = parsedData.metadata;
+
+    // Fetch attachments using the correct v3 resources endpoint
+    const attachments = await ClientApiParser.fetchAttachmentsFromClientApi(opportunityId, sessionTokens);
+    console.log(`Fetched ${attachments.length} attachments`);
+
+    // Update contract with attachments
+    contract.attachments = attachments;
+
+    // Return preview data WITHOUT saving to database
+    res.json({
+      contract: contract,
+      metadata: metadata,
+      attachments: attachments,
+      fetchedAt: new Date().toISOString(),
+      method: "client-api",
+      attachmentSource: attachments.length > 0 ? 'client-api' : 'none',
+      preview: true // Flag to indicate this is preview data
+    });
+  } catch (error: any) {
+    if (error.response) {
+      console.error(`${error.response.status} - SAM.gov client API error:`, error.response.statusText);
+      res.status(error.response.status).json({ error: `SAM.gov client API failed: ${error.response.statusText}` });
+    } else {
+      console.error("500 - Client API preview error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  }
+};
 
 export const getContracts = 
   (db: DatabaseService) => async (req: Request, res: Response) => {
@@ -1011,3 +1105,197 @@ export const analyzeContract =
 export const healthCheckHandler = (_req: Request, res: Response) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 };
+
+// Search endpoints
+
+export const searchFromUrl = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    
+    try {
+      const { url, maxPages = 1, delayMs = 2000 } = req.body;
+      
+      if (!url) {
+        console.error("400 - No search URL provided");
+        return res.status(400).json({ error: "No search URL provided" });
+      }
+      
+      console.log(`Searching SAM.gov from URL: ${url}`);
+      
+      // Parse URL to extract filters
+      const filters = SAMSearchService.parseSearchUrl(url);
+      console.log('Parsed filters:', JSON.stringify(filters, null, 2));
+      
+      // Perform search with pagination
+      const searchResult = await SAMSearchService.searchWithPagination(
+        filters,
+        maxPages,
+        delayMs
+      );
+      
+      const searchDuration = Date.now() - startTime;
+      searchResult.searchDuration = searchDuration;
+      
+      console.log(`Search completed in ${searchDuration}ms: ${searchResult.contracts.length} contracts found`);
+      
+      // Save search to history
+      await db.saveSearchHistory(url, searchResult.pagination.totalElements);
+      
+      res.json({
+        ...searchResult,
+        message: `Found ${searchResult.contracts.length} contracts (Page ${searchResult.pagination.page + 1} of ${searchResult.pagination.totalPages}, ${searchResult.pagination.totalElements} total)`
+      });
+    } catch (error: any) {
+      const searchDuration = Date.now() - startTime;
+      console.error(`Search failed after ${searchDuration}ms:`, error.message);
+      
+      if (error.response) {
+        res.status(error.response.status).json({ 
+          error: `SAM.gov search failed: ${error.response.statusText}`,
+          details: error.response.data 
+        });
+      } else {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  };
+
+export const searchDirect = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    
+    try {
+      const { filters, maxPages = 1, delayMs = 2000 } = req.body;
+      
+      if (!filters || typeof filters !== 'object') {
+        console.error("400 - No search filters provided");
+        return res.status(400).json({ error: "No search filters provided" });
+      }
+      
+      console.log('Direct search with filters:', JSON.stringify(filters, null, 2));
+      
+      // Perform search with pagination
+      const searchResult = await SAMSearchService.searchWithPagination(
+        filters as SearchFilters,
+        maxPages,
+        delayMs
+      );
+      
+      const searchDuration = Date.now() - startTime;
+      searchResult.searchDuration = searchDuration;
+      
+      console.log(`Direct search completed in ${searchDuration}ms: ${searchResult.contracts.length} contracts found`);
+      
+      // Save search to history (construct URL from filters)
+      const searchUrl = `Direct search: ${JSON.stringify(filters)}`;
+      await db.saveSearchHistory(searchUrl, searchResult.pagination.totalElements);
+      
+      res.json({
+        ...searchResult,
+        message: `Found ${searchResult.contracts.length} contracts (Page ${searchResult.pagination.page + 1} of ${searchResult.pagination.totalPages}, ${searchResult.pagination.totalElements} total)`
+      });
+    } catch (error: any) {
+      const searchDuration = Date.now() - startTime;
+      console.error(`Direct search failed after ${searchDuration}ms:`, error.message);
+      
+      if (error.response) {
+        res.status(error.response.status).json({ 
+          error: `SAM.gov search failed: ${error.response.statusText}`,
+          details: error.response.data 
+        });
+      } else {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  };
+
+export const addContractsFromSearch = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { contracts } = req.body;
+      
+      if (!contracts || !Array.isArray(contracts)) {
+        console.error("400 - No contracts provided");
+        return res.status(400).json({ error: "Contracts array is required" });
+      }
+      
+      console.log(`Adding ${contracts.length} contracts from search to database`);
+      
+      let addedCount = 0;
+      let existingCount = 0;
+      const errors: string[] = [];
+      
+      for (const contract of contracts) {
+        try {
+          // Check if contract already exists
+          const existingContract = await db.getContract(contract.id);
+          if (existingContract) {
+            existingCount++;
+            continue;
+          }
+          
+          // Save contract to database
+          await db.saveContract(contract);
+          addedCount++;
+          console.log(`Added contract ${contract.id}: ${contract.title}`);
+        } catch (error) {
+          console.error(`Error processing contract ${contract.id}:`, error);
+          errors.push(`${contract.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      const message = `Processed ${contracts.length} contracts: ${addedCount} added, ${existingCount} already exist`;
+      console.log(message);
+      
+      res.json({
+        message,
+        added: addedCount,
+        existing: existingCount,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error: any) {
+      console.error("500 - Error adding contracts from search:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const checkContractsInDatabase = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { contractIds } = req.body;
+      
+      if (!contractIds || !Array.isArray(contractIds)) {
+        console.error("400 - No contract IDs provided");
+        return res.status(400).json({ error: "Contract IDs array is required" });
+      }
+      
+      console.log(`Checking ${contractIds.length} contracts in database`);
+      
+      const results: { [key: string]: boolean } = {};
+      
+      for (const contractId of contractIds) {
+        try {
+          const contract = await db.getContract(contractId);
+          results[contractId] = contract !== null;
+        } catch (error) {
+          console.error(`Error checking contract ${contractId}:`, error);
+          results[contractId] = false;
+        }
+      }
+      
+      const existingCount = Object.values(results).filter(exists => exists).length;
+      console.log(`Found ${existingCount}/${contractIds.length} contracts in database`);
+      
+      res.json({
+        results,
+        summary: {
+          total: contractIds.length,
+          existing: existingCount,
+          new: contractIds.length - existingCount
+        }
+      });
+    } catch (error: any) {
+      console.error("500 - Error checking contracts in database:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };

@@ -1267,6 +1267,122 @@ class DatabaseService {
     });
   }
 
+  // Search history management (method already exists, keeping existing implementation)
+
+  async getSearchHistory(limit: number = 50): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM search_history ORDER BY scraped_at DESC LIMIT ?`,
+        [limit],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+  }
+
+  // Search contracts in database
+  async searchContracts(query: string, filters: any = {}): Promise<Contract[]> {
+    return new Promise((resolve, reject) => {
+      let sql = `
+        SELECT * FROM contracts 
+        WHERE (title LIKE ? OR description LIKE ? OR solicitation_number LIKE ?)
+      `;
+      let params: any[] = [`%${query}%`, `%${query}%`, `%${query}%`];
+      
+      // Add filters
+      if (filters.status) {
+        sql += ` AND status = ?`;
+        params.push(filters.status);
+      }
+      
+      if (filters.isArchived !== undefined) {
+        sql += ` AND is_archived = ?`;
+        params.push(filters.isArchived ? 1 : 0);
+      }
+      
+      if (filters.priority) {
+        sql += ` AND priority = ?`;
+        params.push(filters.priority);
+      }
+      
+      sql += ` ORDER BY created_at DESC LIMIT ?`;
+      params.push(filters.limit || 100);
+      
+      this.db.all(sql, params, async (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const contracts: Contract[] = [];
+          for (const row of rows) {
+            const attachments = await this.getAttachments(row.id);
+            const aiAnalysis = await this.getAIAnalysis(row.id);
+            
+            contracts.push({
+              id: row.id,
+              title: row.title,
+              url: row.url,
+              description: row.description,
+              postedDate: row.posted_date,
+              deadline: row.deadline,
+              status: row.status,
+              aiScore: row.ai_score,
+              aiAnalysis: aiAnalysis,
+              attachments: attachments,
+              flags: row.flags ? JSON.parse(row.flags) : [],
+              priority: row.priority,
+              organizationId: row.organization_id,
+              solicitationNumber: row.solicitation_number,
+              classificationCode: row.classification_code,
+              setAside: row.set_aside,
+              naicsCodes: row.naics_codes ? JSON.parse(row.naics_codes) : [],
+              fetchMethod: row.fetch_method,
+              apiSource: row.api_source,
+              fetchDurationMs: row.fetch_duration_ms,
+              lastViewedAt: row.last_viewed_at,
+              viewCount: row.view_count,
+              analysisStatus: row.analysis_status,
+              isArchived: row.is_archived === 1,
+              archivedAt: row.archived_at,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            });
+          }
+          resolve(contracts);
+        }
+      });
+    });
+  }
+
+  // Check if contracts exist in database
+  async contractsExist(contractIds: string[]): Promise<{ [key: string]: boolean }> {
+    return new Promise((resolve, reject) => {
+      const placeholders = contractIds.map(() => '?').join(',');
+      this.db.all(
+        `SELECT id FROM contracts WHERE id IN (${placeholders})`,
+        contractIds,
+        (err, rows: any[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            const existingIds = new Set(rows.map((row: any) => row.id));
+            const results: { [key: string]: boolean } = {};
+            
+            contractIds.forEach(id => {
+              results[id] = existingIds.has(id);
+            });
+            
+            resolve(results);
+          }
+        }
+      );
+    });
+  }
+
   async close(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.close((err) => {

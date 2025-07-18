@@ -145,13 +145,16 @@ const ContractModal: React.FC<ContractModalProps> = ({
             <div className="flex items-center justify-center h-96 text-red-600 dark:text-red-400">
               <div className="text-center">
                 <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg mb-2">Error loading contract</p>
-                <p className="text-sm">{error}</p>
+                <p className="text-lg mb-2">Contract not saved yet</p>
+                <p className="text-sm mb-4">This contract needs to be saved before viewing details</p>
+                <p className="text-sm text-muted-foreground">
+                  Click the "Save" button in the search results to save this contract first
+                </p>
                 <button
-                  onClick={fetchContract}
+                  onClick={onClose}
                   className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
                 >
-                  Try Again
+                  Back to Search
                 </button>
               </div>
             </div>
