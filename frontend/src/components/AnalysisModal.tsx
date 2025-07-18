@@ -1,7 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Brain, AlertCircle, CheckCircle, Clock, FileText, Upload, Loader2, FileCheck, AlertTriangle } from 'lucide-react';
-import { Contract, AnalysisStatus } from '../types';
-import DocumentUpload from './DocumentUpload';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Brain,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  FileText,
+  Upload,
+  Loader2,
+  FileCheck,
+  AlertTriangle,
+} from "lucide-react";
+import { Contract, AnalysisStatus, GeminiModel } from "../types";
+import DocumentUpload from "./DocumentUpload";
+import ModelSelectionCard from "./ModelSelectionCard";
 
 interface UploadedFile {
   id: string;
@@ -9,7 +21,7 @@ interface UploadedFile {
   name: string;
   size: number;
   type: string;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: "pending" | "uploading" | "success" | "error";
   progress: number;
   error?: string;
 }
@@ -25,36 +37,53 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   contract,
   isOpen,
   onClose,
-  onAnalysisComplete
+  onAnalysisComplete,
 }) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(AnalysisStatus.PENDING);
-  const [analysisStep, setAnalysisStep] = useState('');
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(
+    AnalysisStatus.PENDING
+  );
+  const [analysisStep, setAnalysisStep] = useState("");
   const [showResults, setShowResults] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
+    {}
+  );
   const [error, setError] = useState<string | null>(null);
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const startTime = useRef<number>(0);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [documentCount, setDocumentCount] = useState(0);
+  const [processedDocuments, setProcessedDocuments] = useState(0);
+  const [bypassAttachments, setBypassAttachments] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<GeminiModel>('2.0-flash');
 
   useEffect(() => {
     if (isOpen) {
       // Reset state when modal opens
       setUploadedFiles([]);
       setAnalysisStatus(contract.analysisStatus || AnalysisStatus.PENDING);
-      setAnalysisStep('');
+      setAnalysisStep("");
       setShowResults(false);
       setError(null);
       setUploadProgress({});
       setElapsedTime(0);
       startTime.current = 0;
+      setProgress(0);
+      setDocumentCount(0);
+      setProcessedDocuments(0);
+      setBypassAttachments(false);
+      setSelectedModel('2.0-flash');
     }
   }, [isOpen, contract.analysisStatus]);
 
   useEffect(() => {
     // Update elapsed time during analysis
     let timer: NodeJS.Timeout | null = null;
-    if (analysisStatus === AnalysisStatus.IN_PROGRESS && startTime.current > 0) {
+    if (
+      analysisStatus === AnalysisStatus.IN_PROGRESS &&
+      startTime.current > 0
+    ) {
       timer = setInterval(() => {
         setElapsedTime(Math.floor((Date.now() - startTime.current) / 1000));
       }, 100);
@@ -69,8 +98,8 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   };
 
   const handleRemoveFile = (fileId: string) => {
-    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
-    setUploadProgress(prev => {
+    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+    setUploadProgress((prev) => {
       const newProgress = { ...prev };
       delete newProgress[fileId];
       return newProgress;
@@ -78,24 +107,43 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   };
 
   const hasValidDocuments = () => {
+    if (bypassAttachments) {
+      return uploadedFiles.some((f) => f.status === "success");
+    }
     return (
-      contract.attachments.length > 0 || 
-      uploadedFiles.some(f => f.status === 'success')
+      contract.attachments.length > 0 ||
+      uploadedFiles.some((f) => f.status === "success")
     );
   };
 
   const pollAnalysisStatus = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/contracts/${contract.id}`);
-      if (!response.ok) throw new Error('Failed to fetch status');
-      
-      const data = await response.json();
-      const updatedContract = data.contract;
-      
+      // Fetch contract status
+      const contractResponse = await fetch(
+        `http://localhost:3001/api/contracts/${contract.id}`
+      );
+      if (!contractResponse.ok) throw new Error("Failed to fetch status");
+
+      const contractData = await contractResponse.json();
+      const updatedContract = contractData.contract;
+
+      // Fetch progress data
+      const progressResponse = await fetch(
+        `http://localhost:3001/api/contracts/${contract.id}/analysis-progress`
+      );
+      if (progressResponse.ok) {
+        const progressData = await progressResponse.json();
+        if (progressData.progress) {
+          setProgress(progressData.progress.progress);
+          setAnalysisStep(progressData.progress.message);
+        }
+      }
+
       if (updatedContract.analysisStatus === AnalysisStatus.COMPLETED) {
         setAnalysisStatus(AnalysisStatus.COMPLETED);
-        setAnalysisStep('Analysis complete!');
+        setAnalysisStep("Analysis complete!");
         setShowResults(true);
+        setProgress(100);
         if (pollingInterval.current) {
           clearInterval(pollingInterval.current);
           pollingInterval.current = null;
@@ -103,31 +151,17 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
         onAnalysisComplete(contract.id);
       } else if (updatedContract.analysisStatus === AnalysisStatus.FAILED) {
         setAnalysisStatus(AnalysisStatus.FAILED);
-        setAnalysisStep('Analysis failed');
-        setError('The analysis process encountered an error. Please try again.');
+        setAnalysisStep("Analysis failed");
+        setError(
+          "The analysis process encountered an error. Please try again."
+        );
         if (pollingInterval.current) {
           clearInterval(pollingInterval.current);
           pollingInterval.current = null;
         }
-      } else {
-        // Update analysis step based on elapsed time
-        const elapsed = Math.floor((Date.now() - startTime.current) / 1000);
-        if (elapsed < 3) {
-          setAnalysisStep('Initializing analysis engine...');
-        } else if (elapsed < 6) {
-          setAnalysisStep('Processing uploaded documents...');
-        } else if (elapsed < 10) {
-          setAnalysisStep('Extracting contract information...');
-        } else if (elapsed < 14) {
-          setAnalysisStep('Analyzing wrapper indicators...');
-        } else if (elapsed < 18) {
-          setAnalysisStep('Evaluating contract requirements...');
-        } else {
-          setAnalysisStep('Finalizing analysis results...');
-        }
       }
     } catch (error) {
-      console.error('Error polling status:', error);
+      console.error("Error polling status:", error);
     }
   };
 
@@ -137,23 +171,28 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     }
 
     setAnalysisStatus(AnalysisStatus.IN_PROGRESS);
-    setAnalysisStep('Preparing documents for analysis...');
+    setAnalysisStep("Preparing documents for analysis...");
     setError(null);
     startTime.current = Date.now();
 
     try {
       // Start the analysis process
-      const response = await fetch(`http://localhost:3001/api/contracts/${contract.id}/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          uploadedFiles: uploadedFiles
-            .filter(f => f.status === 'success')
-            .map(f => ({ id: f.id, name: f.name, type: f.type }))
-        })
-      });
+      const response = await fetch(
+        `http://localhost:3001/api/contracts/${contract.id}/analyze`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            uploadedFiles: uploadedFiles
+              .filter((f) => f.status === "success")
+              .map((f) => ({ id: f.id, name: f.name, type: f.type })),
+            bypassAttachments: bypassAttachments,
+            selectedModel: selectedModel,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Analysis failed: ${response.status}`);
@@ -161,18 +200,21 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
       // Start polling for real status updates
       pollingInterval.current = setInterval(pollAnalysisStatus, 1000);
-
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error("Analysis error:", error);
       setAnalysisStatus(AnalysisStatus.FAILED);
-      setAnalysisStep('Failed to start analysis');
-      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
+      setAnalysisStep("Failed to start analysis");
+      setError(
+        error instanceof Error ? error.message : "An unexpected error occurred"
+      );
     }
   };
 
   const getDocumentCount = () => {
-    const attachmentCount = contract.attachments.length;
-    const uploadedCount = uploadedFiles.filter(f => f.status === 'success').length;
+    const attachmentCount = bypassAttachments ? 0 : contract.attachments.length;
+    const uploadedCount = uploadedFiles.filter(
+      (f) => f.status === "success"
+    ).length;
     return attachmentCount + uploadedCount;
   };
 
@@ -200,15 +242,25 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Processing Documents</span>
-                <span className="text-xs text-muted-foreground">{getDocumentCount()} files</span>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">Analysis Progress</span>
+                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                  {Math.round(progress)}%
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                  <div className="bg-blue-500 h-1.5 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+              <div className="relative">
+                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500 ease-out relative"
+                    style={{ width: `${progress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                  </div>
                 </div>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {getDocumentCount()} document
+                {getDocumentCount() !== 1 ? "s" : ""} • {analysisStep}
               </div>
             </div>
 
@@ -226,8 +278,9 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>Tip:</strong> Our AI is analyzing your documents for wrapper contract indicators, 
-              compliance requirements, and incumbent information. This usually takes 15-30 seconds depending 
+              <strong>Tip:</strong> Our AI is analyzing your documents for
+              wrapper contract indicators, compliance requirements, and
+              incumbent information. This usually takes 15-30 seconds depending
               on document complexity.
             </p>
           </div>
@@ -249,7 +302,9 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
           </div>
 
           <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-            <h4 className="font-medium mb-2 text-green-800 dark:text-green-200">Analysis Summary</h4>
+            <h4 className="font-medium mb-2 text-green-800 dark:text-green-200">
+              Analysis Summary
+            </h4>
             <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
               <p>• Documents processed: {getDocumentCount()}</p>
               <p>• Analysis completed in: {formatTime(elapsedTime)}</p>
@@ -277,13 +332,16 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
             <h3 className="text-lg font-semibold mb-2">Analysis Failed</h3>
-            <p className="text-muted-foreground">{error || 'An unexpected error occurred during analysis.'}</p>
+            <p className="text-muted-foreground">
+              {error || "An unexpected error occurred during analysis."}
+            </p>
           </div>
 
           <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
             <p className="text-sm text-red-800 dark:text-red-200">
-              This could be due to document processing issues or temporary service unavailability. 
-              Please ensure your documents are valid PDFs, Word documents, or text files and try again.
+              This could be due to document processing issues or temporary
+              service unavailability. Please ensure your documents are valid
+              PDFs, Word documents, or text files and try again.
             </p>
           </div>
 
@@ -291,7 +349,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
             <button
               onClick={() => {
                 setAnalysisStatus(AnalysisStatus.PENDING);
-                setAnalysisStep('');
+                setAnalysisStep("");
                 setError(null);
                 setElapsedTime(0);
               }}
@@ -310,13 +368,47 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
         <div>
           <h3 className="text-lg font-semibold mb-2">AI Contract Analysis</h3>
           <p className="text-muted-foreground mb-4">
-            Our AI will analyze your contract documents to identify wrapper contract indicators, 
-            evaluate compliance requirements, and provide actionable recommendations.
+            Our AI will analyze your contract documents to identify wrapper
+            contract indicators, evaluate compliance requirements, and provide
+            actionable recommendations.
           </p>
         </div>
 
-        {/* Existing Attachments */}
+        {/* Model Selection */}
+        <ModelSelectionCard
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
+        />
+
+        {/* Bypass Toggle */}
         {contract.attachments.length > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <h4 className="font-medium text-sm mb-2 text-amber-800 dark:text-amber-200">
+                  Attachment Download Settings
+                </h4>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+                  SAM.gov attachments will be downloaded for analysis. If downloads fail, toggle this option to use only uploaded documents.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bypassAttachments}
+                    onChange={(e) => setBypassAttachments(e.target.checked)}
+                    className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-sm text-amber-800 dark:text-amber-200">
+                    Skip attachment downloads (use only uploaded files)
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Existing Attachments */}
+        {contract.attachments.length > 0 && !bypassAttachments && (
           <div>
             <h4 className="font-medium mb-3 flex items-center gap-2">
               <FileText className="w-4 h-4" />
@@ -330,13 +422,29 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
                 >
                   <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{attachment.name}</p>
-                    <p className="text-xs text-muted-foreground">{attachment.type}</p>
+                    <p className="font-medium text-sm truncate">
+                      {attachment.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {attachment.type}
+                    </p>
                   </div>
                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Bypass Notice */}
+        {bypassAttachments && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+            <h4 className="font-medium text-sm mb-2 text-blue-800 dark:text-blue-200">
+              Attachment Downloads Bypassed
+            </h4>
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Only uploaded documents will be used for analysis. SAM.gov attachments will be ignored.
+            </p>
           </div>
         )}
 
@@ -351,19 +459,22 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
             onFilesUploaded={handleFilesUploaded}
             onRemoveFile={handleRemoveFile}
             uploadedFiles={uploadedFiles}
+            // @ts-ignore
             disabled={analysisStatus === AnalysisStatus.IN_PROGRESS}
           />
         </div>
 
         {/* Analysis Info */}
         <div className="bg-muted/50 rounded-lg p-4">
-          <h5 className="font-medium text-sm mb-2">What happens during analysis?</h5>
+          <h5 className="font-medium text-sm mb-2">
+            What happens during analysis?
+          </h5>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>• Extract and process contract text</li>
-            <li>• Identify wrapper contract indicators</li>
-            <li>• Analyze compliance requirements</li>
-            <li>• Detect incumbent vendor information</li>
-            <li>• Generate actionable recommendations</li>
+            <li>• Upload documents directly to Gemini AI</li>
+            <li>• Analyze for wrapper contract red flags</li>
+            <li>• Score likelihood this requires a middleman</li>
+            <li>• Extract incumbent vendor details</li>
+            <li>• Provide specific bidding recommendations</li>
           </ul>
         </div>
 
@@ -378,13 +489,18 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
             ) : (
               <span className="text-green-600 dark:text-green-400 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
-                Ready to analyze {getDocumentCount()} document{getDocumentCount() !== 1 ? 's' : ''}
+                Ready to analyze {getDocumentCount()} document
+                {getDocumentCount() !== 1 ? "s" : ""}
               </span>
             )}
           </div>
           <button
             onClick={startAnalysis}
-            disabled={!hasValidDocuments() || analysisStatus === AnalysisStatus.IN_PROGRESS}
+            disabled={
+              !hasValidDocuments() ||
+              // @ts-ignore
+              analysisStatus === AnalysisStatus.IN_PROGRESS
+            }
             className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Brain className="w-4 h-4" />
@@ -417,7 +533,9 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-bold">AI Contract Analysis</h2>
-              <p className="text-sm text-muted-foreground">Powered by Gemini AI</p>
+              <p className="text-sm text-muted-foreground">
+                Powered by Gemini AI
+              </p>
             </div>
           </div>
           <button
@@ -432,11 +550,15 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 pb-4 border-b">
-            <h3 className="font-medium text-sm text-muted-foreground mb-1">Contract</h3>
+            <h3 className="font-medium text-sm text-muted-foreground mb-1">
+              Contract
+            </h3>
             <p className="text-sm font-medium">{contract.title}</p>
-            <p className="text-xs text-muted-foreground mt-1">ID: {contract.solicitationNumber || contract.id}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              ID: {contract.solicitationNumber || contract.id}
+            </p>
           </div>
-          
+
           {renderContent()}
         </div>
       </div>

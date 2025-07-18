@@ -6,8 +6,78 @@ import axios from "axios";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+import { createWriteStream } from "fs";
 import { AnalysisStatus } from "./database";
-import { GeminiAnalyzer } from "./src/services/geminiAnalyzer";
+import { GeminiAnalyzer, GeminiModel } from "./src/services/geminiAnalyzer";
+
+// Helper function to download attachments
+async function downloadAttachments(attachments: any[], downloadDir: string): Promise<string[]> {
+  const downloadedFiles: string[] = [];
+  
+  // Ensure download directory exists
+  await fs.mkdir(downloadDir, { recursive: true });
+  
+  // Get session tokens from environment variables
+  const sessionTokens = {
+    session: process.env.CLIENT_API_SESSION,
+    xsrfToken: process.env.CLIENT_API_XSRF_TOKEN,
+    authToken: process.env.CLIENT_API_AUTH_TOKEN,
+    cookies: process.env.CLIENT_API_COOKIES,
+  };
+  
+  for (const attachment of attachments) {
+    try {
+      console.log(`Downloading attachment: ${attachment.name}`);
+      
+      const response = await axios.get(attachment.url, {
+        responseType: 'stream',
+        timeout: 30000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br, zstd",
+          "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": '"macOS"',
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "referer": "https://sam.gov/",
+          ...(sessionTokens.cookies && { "cookie": sessionTokens.cookies }),
+          ...(sessionTokens.authToken && { "x-auth-token": sessionTokens.authToken }),
+        },
+      });
+      
+      if (response.status === 200) {
+        // Create a safe filename
+        const safeFilename = attachment.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filePath = path.join(downloadDir, safeFilename);
+        
+        // Create write stream and pipe the response
+        const writer = createWriteStream(filePath);
+        response.data.pipe(writer);
+        
+        // Wait for the download to complete
+        await new Promise((resolve, reject) => {
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+        
+        downloadedFiles.push(filePath);
+        console.log(`Successfully downloaded: ${attachment.name}`);
+      } else {
+        console.error(`Failed to download ${attachment.name}: HTTP ${response.status}`);
+        throw new Error(`Failed to download ${attachment.name}: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error(`Error downloading attachment ${attachment.name}:`, error);
+      throw new Error(`Failed to download attachment ${attachment.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  return downloadedFiles;
+}
 
 export const fetchSingle =
   (_db: DatabaseService) => async (req: Request, res: Response) => {
@@ -419,31 +489,17 @@ export const fetchContractAttachments =
         return res.status(404).json({ error: "Contract not found" });
       }
       
-      // Fetch attachments using the official SAM.gov API
-      const attachmentsUrl = `https://api.sam.gov/opportunities/v2/attachments/${id}`;
+      // Get session tokens from environment variables
+      const sessionTokens = {
+        session: process.env.CLIENT_API_SESSION,
+        xsrfToken: process.env.CLIENT_API_XSRF_TOKEN,
+        authToken: process.env.CLIENT_API_AUTH_TOKEN,
+        cookies: process.env.CLIENT_API_COOKIES,
+      };
       
-      const response = await axios.get(attachmentsUrl, {
-        headers: {
-          'X-API-Key': process.env.SAM_API_KEY_1 || '',
-          'User-Agent': 'sam-contract-tracker/0.1',
-          'Accept': 'application/json'
-        },
-        timeout: 30000
-      });
-      
-      const attachmentData = response.data;
-      
-      // Parse the attachment data into our format
-      const attachments = attachmentData.attachments?.map((att: any) => ({
-        id: att.id || `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: att.name || att.filename || 'Unknown',
-        url: att.url || att.downloadUrl || att.link || '',
-        type: att.type || att.mimeType || 'application/octet-stream',
-        size: att.size || att.fileSize || 0,
-        downloaded: false,
-        downloadedAt: null,
-        content: null
-      })) || [];
+      // Fetch attachments using the v3 client API
+      const attachments = await ClientApiParser.fetchAttachmentsFromClientApi(id, sessionTokens);
+      console.log(`Fetched ${attachments.length} attachments for retry`);
       
       // Save attachments to database
       for (const attachment of attachments) {
@@ -461,15 +517,8 @@ export const fetchContractAttachments =
         contract: updatedContract
       });
     } catch (error: any) {
-      if (error.response) {
-        console.error(`${error.response.status} - SAM API error:`, error.response.statusText);
-        res.status(error.response.status).json({ 
-          error: `SAM API error: ${error.response.status} - ${error.response.statusText}` 
-        });
-      } else {
-        console.error("500 - Error fetching contract attachments:", error.message);
-        res.status(500).json({ error: error.message });
-      }
+      console.error("500 - Error fetching contract attachments:", error.message);
+      res.status(500).json({ error: error.message });
     }
   };
 
@@ -584,11 +633,162 @@ export const updateAnalysisStatus =
     }
   };
 
+export const getAnalysisProgress = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        console.error("400 - Contract ID is required");
+        return res.status(400).json({ error: "Contract ID is required" });
+      }
+      
+      const progress = await db.getAnalysisProgress(id);
+      
+      res.json({ progress: progress || { progress: 0, message: 'Starting analysis...' } });
+    } catch (error: any) {
+      console.error("500 - Error getting analysis progress:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const getAnalysisHistory = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        console.error("400 - Contract ID is required");
+        return res.status(400).json({ error: "Contract ID is required" });
+      }
+      
+      const history = await db.getAnalysisHistory(id);
+      
+      res.json({ history });
+    } catch (error: any) {
+      console.error("500 - Error getting analysis history:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const getAnalysisVersion = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id, version } = req.params;
+      
+      if (!id || !version) {
+        console.error("400 - Contract ID and version are required");
+        return res.status(400).json({ error: "Contract ID and version are required" });
+      }
+      
+      const analysis = await db.getAIAnalysis(id, parseInt(version));
+      
+      if (!analysis) {
+        console.error(`404 - Analysis version ${version} not found for contract ${id}`);
+        return res.status(404).json({ error: "Analysis version not found" });
+      }
+      
+      res.json({ analysis });
+    } catch (error: any) {
+      console.error("500 - Error getting analysis version:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+// Analysis Notes routes
+export const getAnalysisNotes = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id, version } = req.params;
+      
+      if (!id || !version) {
+        console.error("400 - Contract ID and version are required");
+        return res.status(400).json({ error: "Contract ID and version are required" });
+      }
+      
+      const notes = await db.getAnalysisNotes(id, parseInt(version));
+      
+      res.json({ notes });
+    } catch (error: any) {
+      console.error("500 - Error getting analysis notes:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const addAnalysisNote = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id, version } = req.params;
+      const { content, type } = req.body;
+      
+      if (!id || !version || !content) {
+        console.error("400 - Contract ID, version, and content are required");
+        return res.status(400).json({ error: "Contract ID, version, and content are required" });
+      }
+      
+      const note = {
+        id: `analysis-note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        contractId: id,
+        analysisVersion: parseInt(version),
+        content,
+        type: type || 'general',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await db.addAnalysisNote(note);
+      
+      res.json({ note });
+    } catch (error: any) {
+      console.error("500 - Error adding analysis note:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const updateAnalysisNote = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { noteId } = req.params;
+      const { content } = req.body;
+      
+      if (!noteId || !content) {
+        console.error("400 - Note ID and content are required");
+        return res.status(400).json({ error: "Note ID and content are required" });
+      }
+      
+      await db.updateAnalysisNote(noteId, content);
+      
+      res.json({ message: "Analysis note updated successfully" });
+    } catch (error: any) {
+      console.error("500 - Error updating analysis note:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const deleteAnalysisNote = 
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { noteId } = req.params;
+      
+      if (!noteId) {
+        console.error("400 - Note ID is required");
+        return res.status(400).json({ error: "Note ID is required" });
+      }
+      
+      await db.deleteAnalysisNote(noteId);
+      
+      res.json({ message: "Analysis note deleted successfully" });
+    } catch (error: any) {
+      console.error("500 - Error deleting analysis note:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
 export const analyzeContract = 
   (db: DatabaseService) => async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { uploadedFiles } = req.body;
+      const { uploadedFiles, bypassAttachments, selectedModel } = req.body;
       
       if (!id) {
         console.error("400 - Contract ID is required");
@@ -602,41 +802,79 @@ export const analyzeContract =
         return res.status(404).json({ error: "Contract not found" });
       }
       
+      // Default to 2.0-flash if no model specified
+      const model: GeminiModel = selectedModel || '2.0-flash';
+      
       // Update contract status to IN_PROGRESS
       await db.updateContractAnalysisStatus(id, AnalysisStatus.IN_PROGRESS);
-      console.log(`Started analysis for contract ${id}`);
+      await db.updateAnalysisProgress(id, 5, 'Initializing analysis...');
+      console.log(`Started analysis for contract ${id}, model: ${model}, bypassAttachments: ${bypassAttachments}`);
       
       // Start async analysis process
       (async () => {
         const uploadDir = path.join(__dirname, 'uploads', 'tmp', 'contract-analysis', id);
         
         try {
-          // Clean up any existing directory first (in case of re-analysis)
-          try {
-            await fs.rm(uploadDir, { recursive: true, force: true });
-            console.log(`Cleaned up existing upload directory for contract ${id} before analysis`);
-          } catch (cleanupError) {
-            // Directory might not exist, that's okay
-          }
-          
           // Get uploaded file paths
           let uploadedFilePaths: string[] = [];
+          
+          await db.updateAnalysisProgress(id, 10, 'Locating uploaded documents...');
           
           try {
             const files = await fs.readdir(uploadDir);
             uploadedFilePaths = files.map(file => path.join(uploadDir, file));
+            console.log(`Found ${uploadedFilePaths.length} uploaded files for contract ${id}`);
+            await db.updateAnalysisProgress(id, 15, `Found ${uploadedFilePaths.length} document${uploadedFilePaths.length !== 1 ? 's' : ''} to analyze`);
           } catch (dirError) {
-            console.log(`No uploaded files found for contract ${id}`);
+            console.log(`No uploaded files found for contract ${id} - directory may not exist`);
+          }
+          
+          // Download attachments if not bypassed
+          let attachmentFilePaths: string[] = [];
+          if (!bypassAttachments && contract.attachments && contract.attachments.length > 0) {
+            await db.updateAnalysisProgress(id, 20, `Downloading ${contract.attachments.length} attachment${contract.attachments.length !== 1 ? 's' : ''}...`);
+            
+            try {
+              attachmentFilePaths = await downloadAttachments(contract.attachments, uploadDir);
+              console.log(`Downloaded ${attachmentFilePaths.length} attachments for contract ${id}`);
+              await db.updateAnalysisProgress(id, 25, `Downloaded ${attachmentFilePaths.length} attachment${attachmentFilePaths.length !== 1 ? 's' : ''}`);
+            } catch (downloadError) {
+              console.error(`Attachment download failed for contract ${id}:`, downloadError);
+              await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
+              await db.updateAnalysisProgress(id, 0, 'Attachment download failed');
+              return;
+            }
+          } else if (bypassAttachments) {
+            console.log(`Bypassing attachment downloads for contract ${id}`);
+            await db.updateAnalysisProgress(id, 20, 'Bypassing attachment downloads...');
+          }
+          
+          // Combine uploaded files and downloaded attachments
+          const allFilePaths = [...uploadedFilePaths, ...attachmentFilePaths];
+          console.log(`Total files for analysis: ${allFilePaths.length} (${uploadedFilePaths.length} uploaded, ${attachmentFilePaths.length} downloaded)`);
+          
+          if (allFilePaths.length === 0) {
+            console.error(`No files available for analysis for contract ${id}`);
+            await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
+            await db.updateAnalysisProgress(id, 0, 'No documents available for analysis');
+            return;
           }
           
           // Use Gemini API if configured, otherwise use mock data
           let analysisResult;
           
           if (process.env.GEMINI_API_KEY) {
-            console.log(`Starting Gemini analysis for contract ${id} with ${uploadedFilePaths.length} documents`);
+            console.log(`Starting Gemini analysis for contract ${id} with ${allFilePaths.length} documents`);
+            await db.updateAnalysisProgress(id, 30, 'Connecting to Gemini AI service...');
             
             try {
-              const geminiAnalysis = await GeminiAnalyzer.analyzeContract(contract, uploadedFilePaths, process.env.GEMINI_API_KEY!);
+              await db.updateAnalysisProgress(id, 40, 'Uploading documents to Gemini...');
+              const geminiAnalysis = await GeminiAnalyzer.analyzeContract(contract, allFilePaths, process.env.GEMINI_API_KEY!, async (progress, message) => {
+                // Progress callback
+                await db.updateAnalysisProgress(id, progress, message);
+              }, model);
+              
+              await db.updateAnalysisProgress(id, 90, 'Processing analysis results...');
               
               // Convert Gemini analysis to our database format
               analysisResult = {
@@ -650,6 +888,7 @@ export const analyzeContract =
                 estimatedValue: geminiAnalysis.estimatedValue,
                 competitionLevel: geminiAnalysis.competitionLevel,
                 competitionNotes: geminiAnalysis.competitionNotes,
+                aiModel: model,
                 analyzedAt: new Date().toISOString()
               };
             } catch (geminiError) {
@@ -658,6 +897,21 @@ export const analyzeContract =
             }
           } else {
             console.log(`Using mock analysis for contract ${id} (no GEMINI_API_KEY configured)`);
+            
+            // Simulate progress updates for mock analysis
+            await db.updateAnalysisProgress(id, 30, 'Starting mock analysis...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            await db.updateAnalysisProgress(id, 50, 'Processing contract data...');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            await db.updateAnalysisProgress(id, 70, 'Analyzing wrapper indicators...');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            await db.updateAnalysisProgress(id, 85, 'Generating recommendations...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            await db.updateAnalysisProgress(id, 90, 'Finalizing analysis...');
             
             // Mock analysis results
             analysisResult = {
@@ -685,13 +939,39 @@ export const analyzeContract =
               estimatedValue: 'Unknown',
               competitionLevel: 'medium',
               competitionNotes: 'Mock analysis - no real assessment available',
+              aiModel: model,
               analyzedAt: new Date().toISOString()
             };
           }
           
+          // Prepare document list
+          const documentsAnalyzed: Array<{ filename: string; type: string }> = [];
+          
+          // Add uploaded files info
+          if (uploadedFiles && uploadedFiles.length > 0) {
+            uploadedFiles.forEach((file: any) => {
+              documentsAnalyzed.push({
+                filename: file.name,
+                type: file.type
+              });
+            });
+          }
+          
+          // Add downloaded attachments info only if they were actually downloaded
+          if (!bypassAttachments && contract.attachments && contract.attachments.length > 0) {
+            contract.attachments.forEach((attachment: any) => {
+              documentsAnalyzed.push({
+                filename: attachment.name,
+                type: attachment.type
+              });
+            });
+          }
+          
           // Update contract with analysis results
-          await db.updateContractAnalysis(id, analysisResult);
+          await db.updateAnalysisProgress(id, 95, 'Saving analysis results...');
+          await db.updateContractAnalysis(id, analysisResult, documentsAnalyzed);
           await db.updateContractAnalysisStatus(id, AnalysisStatus.COMPLETED);
+          await db.updateAnalysisProgress(id, 100, 'Analysis complete!');
           
           // Clean up uploaded files
           try {

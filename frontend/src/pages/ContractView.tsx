@@ -11,7 +11,9 @@ import {
   Eye,
   Clock,
   Activity,
-  StopCircle
+  StopCircle,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react';
 import { Contract, AnalysisStatus, ContractPriority } from '../types';
 import StatusBadge from '../components/StatusBadge';
@@ -22,6 +24,8 @@ import ContractPriorityComponent from '../components/ContractPriority';
 import ContractStatusSelector from '../components/ContractStatusSelector';
 import AnalysisModal from '../components/AnalysisModal';
 import AnalysisResults from '../components/AnalysisResults';
+import AnalysisVersionSelector from '../components/AnalysisVersionSelector';
+import AttachmentList from '../components/AttachmentList';
 // @ts-ignore
 import DOMPurify from 'dompurify';
 
@@ -35,6 +39,10 @@ const ContractView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'analysis'>('details');
   const [fetchingAttachments, setFetchingAttachments] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
+  const [versionAnalysis, setVersionAnalysis] = useState<any>(null);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showUnarchiveConfirm, setShowUnarchiveConfirm] = useState(false);
 
   const fetchContract = useCallback(async () => {
     if (!id) return;
@@ -87,6 +95,80 @@ const ContractView: React.FC = () => {
     // Refresh contract data after analysis
     await fetchContract();
     setShowAnalysisModal(false);
+    // Reset version selection to show latest
+    setSelectedVersion(undefined);
+    setVersionAnalysis(null);
+  };
+
+  const handleVersionChange = async (version: number) => {
+    if (!id) return;
+    
+    try {
+      const response = await fetch(`http://localhost:3001/api/contracts/${id}/analysis/${version}`);
+      if (response.ok) {
+        const data = await response.json();
+        setVersionAnalysis(data.analysis);
+        setSelectedVersion(version);
+      }
+    } catch (error) {
+      console.error('Error fetching analysis version:', error);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!id) return;
+    
+    try {
+      const response = await fetch(`http://localhost:3001/api/contracts/${id}/archive`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to archive contract: ${response.status}`);
+      }
+
+      // Update contract state
+      setContract(prev => prev ? { 
+        ...prev, 
+        isArchived: true, 
+        archivedAt: new Date().toISOString() 
+      } : null);
+      
+      setShowArchiveConfirm(false);
+    } catch (error) {
+      console.error('Error archiving contract:', error);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    if (!id) return;
+    
+    try {
+      const response = await fetch(`http://localhost:3001/api/contracts/${id}/unarchive`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to unarchive contract: ${response.status}`);
+      }
+
+      // Update contract state
+      setContract(prev => prev ? { 
+        ...prev, 
+        isArchived: false, 
+        archivedAt: undefined 
+      } : null);
+      
+      setShowUnarchiveConfirm(false);
+    } catch (error) {
+      console.error('Error unarchiving contract:', error);
+    }
   };
 
   const handleFetchAttachments = async () => {
@@ -303,15 +385,15 @@ const ContractView: React.FC = () => {
             }`}
           >
             AI Analysis
-            {contract.analysisStatus === AnalysisStatus.COMPLETED && contract.aiAnalysis && (
+            {contract.analysisStatus === AnalysisStatus.COMPLETED && (versionAnalysis || contract.aiAnalysis) && (
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                contract.aiAnalysis.wrapperScore >= 70 
+                (versionAnalysis || contract.aiAnalysis).wrapperScore >= 70 
                   ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' 
-                  : contract.aiAnalysis.wrapperScore >= 40
+                  : (versionAnalysis || contract.aiAnalysis).wrapperScore >= 40
                   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
                   : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
               }`}>
-                {contract.aiAnalysis.wrapperScore}%
+                {(versionAnalysis || contract.aiAnalysis).wrapperScore}%
               </span>
             )}
           </button>
@@ -338,6 +420,34 @@ const ContractView: React.FC = () => {
                         priority={contract.priority || ContractPriority.MEDIUM}
                         onPriorityUpdate={(priority: ContractPriority) => setContract(prev => prev ? { ...prev, priority } : null)}
                       />
+                      
+                      {/* Archive/Unarchive */}
+                      <div className="pt-4 border-t border-border">
+                        <label className="block text-sm font-medium mb-2">Archive Status</label>
+                        {contract.isArchived ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Archive className="w-4 h-4" />
+                              <span>Archived {contract.archivedAt ? `on ${new Date(contract.archivedAt).toLocaleDateString()}` : ''}</span>
+                            </div>
+                            <button
+                              onClick={() => setShowUnarchiveConfirm(true)}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                            >
+                              <ArchiveRestore className="w-4 h-4" />
+                              Unarchive Contract
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowArchiveConfirm(true)}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                          >
+                            <Archive className="w-4 h-4" />
+                            Archive Contract
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -463,61 +573,11 @@ const ContractView: React.FC = () => {
               </div>
 
               {/* Attachments Section */}
-              <div className="bg-card rounded-lg shadow-sm border border-border">
-                <div className="flex items-center justify-between p-6 border-b border-border">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Attachments ({contract.attachments.length})
-                  </h3>
-                  {contract.attachments.length === 0 && (
-                    <button
-                      onClick={handleFetchAttachments}
-                      disabled={fetchingAttachments}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {fetchingAttachments ? 'Fetching...' : 'Fetch Attachments'}
-                    </button>
-                  )}
-                </div>
-                <div className="p-6">
-                  {contract.attachments.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <p className="text-lg mb-2">No attachments</p>
-                      <p>This contract has no attachments available</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {contract.attachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className="p-4 border border-border rounded-lg hover:bg-muted/50"
-                        >
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-muted-foreground" />
-                            <div className="flex-1">
-                              <h5 className="font-medium">{attachment.name}</h5>
-                              <p className="text-sm text-muted-foreground">{attachment.type}</p>
-                              {attachment.size && (
-                                <p className="text-xs text-muted-foreground">
-                                  {(attachment.size / 1024).toFixed(1)} KB
-                                </p>
-                              )}
-                            </div>
-                            <a
-                              href={attachment.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 text-blue-500 hover:text-blue-600"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <AttachmentList
+                attachments={contract.attachments}
+                onFetchAttachments={handleFetchAttachments}
+                fetchingAttachments={fetchingAttachments}
+              />
             </div>
           ) : (
             <div className="space-y-4">
@@ -556,8 +616,21 @@ const ContractView: React.FC = () => {
                     Stop Analysis
                   </button>
                 </div>
-              ) : contract.analysisStatus === AnalysisStatus.COMPLETED && contract.aiAnalysis ? (
-                <AnalysisResults analysis={contract.aiAnalysis} />
+              ) : contract.analysisStatus === AnalysisStatus.COMPLETED && (versionAnalysis || contract.aiAnalysis) ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Analysis Results</h3>
+                    <AnalysisVersionSelector
+                      contractId={contract.id}
+                      currentVersion={selectedVersion}
+                      onVersionChange={handleVersionChange}
+                    />
+                  </div>
+                  <AnalysisResults 
+                    analysis={versionAnalysis || contract.aiAnalysis} 
+                    contractId={contract.id}
+                  />
+                </div>
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <Activity className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -600,6 +673,58 @@ const ContractView: React.FC = () => {
           onClose={handleCloseAnalysisModal}
           onAnalysisComplete={handleAnalysisComplete}
         />
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Archive Contract</h3>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to archive this contract? This will hide it from the main contract list but preserve all data and notes.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowArchiveConfirm(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleArchive}
+                className="px-4 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unarchive Confirmation Modal */}
+      {showUnarchiveConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Unarchive Contract</h3>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to unarchive this contract? This will restore it to the main contract list.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowUnarchiveConfirm(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUnarchive}
+                className="px-4 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+              >
+                Unarchive
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

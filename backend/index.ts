@@ -22,7 +22,14 @@ import {
   getRecentActivity,
   fetchContractAttachments,
   uploadDocuments,
-  analyzeContract
+  analyzeContract,
+  getAnalysisProgress,
+  getAnalysisHistory,
+  getAnalysisVersion,
+  getAnalysisNotes,
+  addAnalysisNote,
+  updateAnalysisNote,
+  deleteAnalysisNote
 } from "./routes";
 
 dotenv.config();
@@ -59,6 +66,13 @@ app.get("/api/contracts/:id", getContractById(db));
 app.post("/api/contracts/:id/fetch-attachments", fetchContractAttachments(db));
 app.post("/api/contracts/:id/upload-documents", ...uploadDocuments(db));
 app.post("/api/contracts/:id/analyze", analyzeContract(db));
+app.get("/api/contracts/:id/analysis-progress", getAnalysisProgress(db));
+app.get("/api/contracts/:id/analysis-history", getAnalysisHistory(db));
+app.get("/api/contracts/:id/analysis/:version", getAnalysisVersion(db));
+app.get("/api/contracts/:id/analysis/:version/notes", getAnalysisNotes(db));
+app.post("/api/contracts/:id/analysis/:version/notes", addAnalysisNote(db));
+app.put("/api/analysis-notes/:noteId", updateAnalysisNote(db));
+app.delete("/api/analysis-notes/:noteId", deleteAnalysisNote(db));
 
 // Contract lifecycle management routes
 app.put("/api/contracts/:id/status", updateContractStatus(db));

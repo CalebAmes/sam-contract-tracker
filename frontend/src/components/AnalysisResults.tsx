@@ -9,19 +9,55 @@ import {
   Building,
   Flag,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Brain
 } from 'lucide-react';
-import { AIAnalysis } from '../types';
+import { AIAnalysis, GeminiModel } from '../types';
+import AnalysisNotes from './AnalysisNotes';
 
 interface AnalysisResultsProps {
   analysis: AIAnalysis;
+  contractId?: string;
 }
 
-const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis }) => {
+const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis, contractId }) => {
   const getWrapperScoreColor = (score: number) => {
     if (score >= 70) return 'text-red-600 dark:text-red-400';
     if (score >= 40) return 'text-yellow-600 dark:text-yellow-400';
     return 'text-green-600 dark:text-green-400';
+  };
+
+  const getModelBadge = (model: string) => {
+    const modelConfig = {
+      '2.0-flash': { 
+        label: 'Gemini 2.0 Flash', 
+        color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+        icon: '⚡'
+      },
+      '2.5-flash': { 
+        label: 'Gemini 2.5 Flash', 
+        color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+        icon: '🚀'
+      },
+      '2.5-pro': { 
+        label: 'Gemini 2.5 Pro', 
+        color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+        icon: '🧠'
+      }
+    };
+    
+    const config = modelConfig[model as keyof typeof modelConfig] || modelConfig['2.0-flash'];
+    
+    return (
+      <span 
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+        title={`Analysis performed using ${config.label}`}
+      >
+        <span>{config.icon}</span>
+        {config.label}
+      </span>
+    );
   };
 
   const getWrapperScoreBackground = (score: number) => {
@@ -60,7 +96,10 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis }) => {
       <div className={`p-6 rounded-lg ${getWrapperScoreBackground(analysis.wrapperScore)}`}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold mb-1">Wrapper Contract Likelihood</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-lg font-semibold">Wrapper Contract Likelihood</h3>
+              {analysis.aiModel && getModelBadge(analysis.aiModel)}
+            </div>
             <p className="text-sm text-muted-foreground">
               Based on AI analysis of contract documents
             </p>
@@ -194,9 +233,47 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysis }) => {
         </div>
       </div>
 
+      {/* Documents Analyzed */}
+      {analysis.documentsAnalyzed && analysis.documentsAnalyzed.length > 0 && (
+        <div className="bg-card p-6 rounded-lg border border-border">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Documents Analyzed
+            {analysis.version && (
+              <span className="text-sm font-normal text-muted-foreground">
+                (Version {analysis.version})
+              </span>
+            )}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {analysis.documentsAnalyzed.map((doc, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg"
+              >
+                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{doc.filename}</p>
+                  <p className="text-xs text-muted-foreground">{doc.type}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Analysis Notes */}
+      {contractId && analysis.version && (
+        <AnalysisNotes
+          contractId={contractId}
+          analysisVersion={analysis.version}
+        />
+      )}
+
       {/* Analysis Timestamp */}
       <div className="text-center text-sm text-muted-foreground">
         Analysis completed on {new Date(analysis.analyzedAt).toLocaleString()}
+        {analysis.version && ` • Version ${analysis.version}`}
       </div>
     </div>
   );

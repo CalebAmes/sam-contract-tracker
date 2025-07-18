@@ -68,19 +68,36 @@ Red flags to look for:
 - References to "current system" or "existing contractor"
 - Migration requirements from specific systems`;
 
+export type GeminiModel = '2.0-flash' | '2.5-flash' | '2.5-pro';
+
 export class GeminiAnalyzer {
-  private static API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  private static BASE_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+  private static getModelEndpoint(model: GeminiModel): string {
+    const modelMap = {
+      '2.0-flash': 'gemini-2.0-flash',
+      '2.5-flash': 'gemini-2.5-flash',
+      '2.5-pro': 'gemini-2.5-pro'
+    };
+    return `${this.BASE_API_URL}/${modelMap[model]}:generateContent`;
+  }
 
   static async analyzeContract(
     contractData: any,
     uploadedFilePaths: string[],
-    apiKey: string
+    apiKey: string,
+    progressCallback?: (progress: number, message: string) => Promise<void>,
+    model: GeminiModel = '2.0-flash'
   ): Promise<WrapperAnalysis> {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY not configured');
     }
 
     try {
+      if (progressCallback) {
+        await progressCallback(35, 'Preparing contract data for analysis...');
+      }
+      
       // Prepare the parts array with contract data and file uploads
       const parts: any[] = [
         {
@@ -89,7 +106,15 @@ export class GeminiAnalyzer {
       ];
 
       // Add uploaded documents as inline data
-      for (const filePath of uploadedFilePaths) {
+      for (let i = 0; i < uploadedFilePaths.length; i++) {
+        const filePath = uploadedFilePaths[i];
+        if (progressCallback) {
+          await progressCallback(
+            40 + (i / uploadedFilePaths.length) * 20, 
+            `Reading document ${i + 1} of ${uploadedFilePaths.length}...`
+          );
+        }
+        
         const fileData = await fs.readFile(filePath);
         const mimeType = this.getMimeType(filePath);
         
@@ -101,18 +126,28 @@ export class GeminiAnalyzer {
         });
       }
 
+      if (progressCallback) {
+        await progressCallback(65, 'Sending documents to Gemini AI for analysis...');
+      }
+
+      const endpoint = this.getModelEndpoint(model);
+      console.log(`Using Gemini model: ${model} at endpoint: ${endpoint}`);
+      
+      // Configure generation parameters based on model
+      const generationConfig = {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: model === '2.5-pro' ? 10000 : model === '2.5-flash' ? 10000 : 2048,
+      };
+
       const response = await axios.post(
-        `${this.API_URL}?key=${apiKey}`,
+        `${endpoint}?key=${apiKey}`,
         {
           contents: [{
             parts: parts
           }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 2048,
-          },
+          generationConfig,
           safetySettings: [
             {
               category: "HARM_CATEGORY_HARASSMENT",
@@ -139,7 +174,39 @@ export class GeminiAnalyzer {
         }
       );
 
-      const result = response.data.candidates[0].content.parts[0].text;
+      if (progressCallback) {
+        await progressCallback(85, 'Processing Gemini AI response...');
+      }
+
+      // Check response structure and log for debugging
+      console.log('Gemini API Response Status:', response.status);
+      console.log('Gemini API Response Data:', JSON.stringify(response.data, null, 2));
+      
+      if (!response.data || !response.data.candidates || !response.data.candidates[0]) {
+        console.error('Invalid Gemini API response structure:', response.data);
+        throw new Error(`Invalid Gemini API response: ${JSON.stringify(response.data)}`);
+      }
+
+      const candidate = response.data.candidates[0];
+      
+      // Handle MAX_TOKENS finish reason
+      if (candidate.finishReason === 'MAX_TOKENS') {
+        console.error('Gemini response was cut off due to max tokens limit');
+        throw new Error(`Analysis incomplete: The ${model} model reached its maximum token limit. Try using a simpler prompt or switch to a model with higher limits.`);
+      }
+      
+      // Handle other finish reasons that might not have content
+      if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+        console.error('Gemini response finished with reason:', candidate.finishReason);
+        throw new Error(`Analysis failed: The model finished with reason "${candidate.finishReason}". Please try again or use a different model.`);
+      }
+
+      if (!candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+        console.error('Invalid candidate structure:', candidate);
+        throw new Error(`Invalid candidate structure: ${JSON.stringify(candidate)}`);
+      }
+
+      const result = candidate.content.parts[0].text;
       
       // Clean up the response - sometimes Gemini returns JSON wrapped in markdown
       let cleanedResult = result;
@@ -154,9 +221,15 @@ export class GeminiAnalyzer {
       
       return analysis as WrapperAnalysis;
     } catch (error) {
-      console.error('Error analyzing contract with Gemini:', error);
+      console.error('Error analyzing contract with Gemini:', error instanceof Error ? error.message : error);
       if (axios.isAxiosError(error)) {
-        console.error('Response data:', error.response?.data);
+        console.error('Axios error details:');
+        console.error('- Status:', error.response?.status);
+        console.error('- Status text:', error.response?.statusText);
+        console.error('- Request URL:', error.config?.url);
+        console.error('- Request Method:', error.config?.method);
+        console.error('- Response headers:', error.response?.headers);
+        console.error('- Response data:', JSON.stringify(error.response?.data, null, 2));
       }
       throw error;
     }

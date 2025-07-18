@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
-  Building, 
   ExternalLink, 
   Eye, 
   ChevronDown, 
   ChevronUp,
   Search,
-  FileText
+  FileText,
+  Archive
 } from 'lucide-react';
-import { Contract, ContractStatus, AnalysisStatus } from '../types';
+import { Contract, ContractStatus, AnalysisStatus, ContractPriority } from '../types';
 import StatusBadge from './StatusBadge';
-import AnalyzeButton from './AnalyzeButton';
+import ContractPriorityComponent from './ContractPriority';
 
 interface ContractsTableProps {
   onContractClick: (contractId: string) => void;
@@ -28,6 +28,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<keyof Contract>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     fetchContracts();
@@ -61,14 +62,29 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   };
 
   const sortedAndFilteredContracts = contracts
-    .filter(contract => 
-      contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.organizationId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(contract => {
+      // Archive filter - show only archived OR non-archived
+      if (showArchived && !contract.isArchived) {
+        return false;
+      }
+      if (!showArchived && contract.isArchived) {
+        return false;
+      }
+      
+      // Search filter
+      return contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contract.organizationId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contract.description.toLowerCase().includes(searchTerm.toLowerCase());
+    })
     .sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
+      
+      // Special handling for aiAnalysis (wrapper score)
+      if (sortField === 'aiAnalysis') {
+        aValue = a.aiAnalysis?.wrapperScore ?? -1;
+        bValue = b.aiAnalysis?.wrapperScore ?? -1;
+      }
       
       // Handle undefined values
       if (aValue === undefined) aValue = '';
@@ -112,6 +128,18 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
     } else {
       return <span className="text-green-600 dark:text-green-400">{diffDays} days</span>;
     }
+  };
+
+  const getWrapperScoreColor = (score: number) => {
+    if (score >= 70) return 'text-red-600 dark:text-red-400';
+    if (score >= 40) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-green-600 dark:text-green-400';
+  };
+
+  const getWrapperScoreBackground = (score: number) => {
+    if (score >= 70) return 'bg-red-100 dark:bg-red-900/20';
+    if (score >= 40) return 'bg-yellow-100 dark:bg-yellow-900/20';
+    return 'bg-green-100 dark:bg-green-900/20';
   };
 
   if (loading) {
@@ -169,6 +197,32 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
             className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-input text-foreground focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
+        
+        {/* Archive filter toggle */}
+        <div className="flex items-center border border-border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowArchived(false)}
+            className={`px-3 py-2 text-sm font-medium transition-colors ${
+              !showArchived
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-transparent text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            Active
+          </button>
+          <button
+            onClick={() => setShowArchived(true)}
+            className={`px-3 py-2 text-sm font-medium transition-colors flex items-center gap-2 ${
+              showArchived
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-transparent text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            Archived
+          </button>
+        </div>
+        
         <div className="text-sm text-muted-foreground">
           {sortedAndFilteredContracts.length} contract{sortedAndFilteredContracts.length !== 1 ? 's' : ''}
         </div>
@@ -190,10 +244,10 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('organizationId')}
+                    onClick={() => handleSort('priority')}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
-                    Organization <SortIcon field="organizationId" />
+                    Priority <SortIcon field="priority" />
                   </button>
                 </th>
                 <th className="text-left p-4 font-medium">
@@ -222,10 +276,10 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                 </th>
                 <th className="text-left p-4 font-medium">
                   <button
-                    onClick={() => handleSort('analysisStatus')}
+                    onClick={() => handleSort('aiAnalysis')}
                     className="flex items-center gap-1 hover:text-blue-500"
                   >
-                    Analysis <SortIcon field="analysisStatus" />
+                    Score <SortIcon field="aiAnalysis" />
                   </button>
                 </th>
                 <th className="text-left p-4 font-medium">Actions</th>
@@ -257,10 +311,16 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                     </div>
                   </td>
                   <td className="p-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Building className="w-4 h-4" />
-                      {contract.organizationId || 'Unknown'}
-                    </div>
+                    {contract.priority ? (
+                      <ContractPriorityComponent
+                        priority={contract.priority}
+                        contractId={contract.id}
+                        editable={false}
+                        onPriorityUpdate={() => {}}
+                      />
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -278,32 +338,27 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
                     <StatusBadge status={contract.status} type="contract" size="sm" />
                   </td>
                   <td className="p-4">
-                    <StatusBadge 
-                      status={contract.analysisStatus || AnalysisStatus.PENDING} 
-                      type="analysis" 
-                      size="sm" 
-                    />
+                    {contract.aiAnalysis ? (
+                      <div
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getWrapperScoreBackground(contract.aiAnalysis.wrapperScore)} ${getWrapperScoreColor(contract.aiAnalysis.wrapperScore)}`}
+                      >
+                        {contract.aiAnalysis.wrapperScore}%
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
                   </td>
                   <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <AnalyzeButton
-                        contractId={contract.id}
-                        analysisStatus={contract.analysisStatus || AnalysisStatus.PENDING}
-                        onOpenAnalysisModal={onOpenAnalysisModal}
-                        variant="outline"
-                        size="sm"
-                      />
-                      <a
-                        href={contract.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 text-muted-foreground hover:text-blue-500"
-                        title="View on SAM.gov"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
+                    <a
+                      href={contract.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1 text-muted-foreground hover:text-blue-500"
+                      title="View on SAM.gov"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
                   </td>
                 </tr>
               ))}

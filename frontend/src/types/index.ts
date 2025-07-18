@@ -67,6 +67,8 @@ export interface Attachment {
   content?: string; // Extracted text content
 }
 
+export type GeminiModel = '2.0-flash' | '2.5-flash' | '2.5-pro';
+
 export interface AIAnalysis {
   wrapperScore: number; // 0-100 score for wrapper contract likelihood
   contractType: 'SaaS Reseller' | 'Hardware Reseller' | 'Professional Services' | 'Hybrid' | 'Custom Development' | 'Unknown';
@@ -91,6 +93,12 @@ export interface AIAnalysis {
   competitionLevel: 'low' | 'medium' | 'high';
   competitionNotes: string;
   analyzedAt: string;
+  aiModel?: GeminiModel;
+  version?: number;
+  documentsAnalyzed?: Array<{
+    filename: string;
+    type: string;
+  }>;
 }
 
 export interface WrapperIndicator {
@@ -115,8 +123,7 @@ export enum ContractStatus {
   INVESTIGATING = 'investigating',
   INTERESTED = 'interested',
   DISMISSED = 'dismissed',
-  APPLIED = 'applied',
-  ARCHIVED = 'archived'
+  APPLIED = 'applied'
 }
 
 // Disqualifying Flags (Red)

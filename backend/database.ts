@@ -8,8 +8,7 @@ export enum ContractStatus {
   INVESTIGATING = 'investigating',
   INTERESTED = 'interested',
   DISMISSED = 'dismissed',
-  APPLIED = 'applied',
-  ARCHIVED = 'archived'
+  APPLIED = 'applied'
 }
 
 export enum AnalysisStatus {
@@ -52,6 +51,16 @@ export enum ActivityType {
 export interface ContractNote {
   id: string;
   contractId: string;
+  content: string;
+  type: NoteType;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalysisNote {
+  id: string;
+  contractId: string;
+  analysisVersion: number;
   content: string;
   type: NoteType;
   createdAt: string;
@@ -174,6 +183,20 @@ class DatabaseService {
         )
       `);
 
+      // Analysis Notes table (version-specific notes)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS analysis_notes (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL,
+          analysis_version INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          type TEXT NOT NULL DEFAULT 'general',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
+        )
+      `);
+
       // Attachments table
       this.db.run(`
         CREATE TABLE IF NOT EXISTS attachments (
@@ -190,19 +213,35 @@ class DatabaseService {
         )
       `);
 
-      // AI Analysis table
+      // AI Analysis table with versioning support
       this.db.run(`
         CREATE TABLE IF NOT EXISTS ai_analysis (
           id TEXT PRIMARY KEY,
           contract_id TEXT NOT NULL,
-          wrapper_score INTEGER NOT NULL,
+          type TEXT DEFAULT 'analysis',
+          version INTEGER DEFAULT 1,
+          is_current BOOLEAN DEFAULT 1,
+          wrapper_score INTEGER,
           indicators TEXT NOT NULL,
-          summary TEXT NOT NULL,
-          recommendation TEXT NOT NULL,
-          analyzed_at TEXT NOT NULL,
+          summary TEXT,
+          recommendation TEXT,
+          documents_analyzed TEXT,
+          ai_model TEXT DEFAULT '2.0-flash',
+          analyzed_at TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
         )
       `);
+
+      // Add aiModel column if it doesn't exist (migration)
+      this.db.run(`
+        ALTER TABLE ai_analysis ADD COLUMN ai_model TEXT DEFAULT '2.0-flash'
+      `, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding ai_model column:', err);
+        }
+      });
 
       // Search history table
       this.db.run(`
@@ -475,11 +514,16 @@ class DatabaseService {
     });
   }
 
-  async getAIAnalysis(contractId: string): Promise<AIAnalysis | undefined> {
+  async getAIAnalysis(contractId: string, version?: number): Promise<AIAnalysis | undefined> {
     return new Promise((resolve, reject) => {
+      const query = version 
+        ? `SELECT * FROM ai_analysis WHERE contract_id = ? AND type = 'analysis' AND version = ?`
+        : `SELECT * FROM ai_analysis WHERE contract_id = ? AND type = 'analysis' AND is_current = 1`;
+      const params = version ? [contractId, version] : [contractId];
+      
       this.db.get(
-        `SELECT * FROM ai_analysis WHERE contract_id = ?`,
-        [contractId],
+        query,
+        params,
         (err, row: any) => {
           if (err) {
             reject(err);
@@ -489,6 +533,10 @@ class DatabaseService {
             // The indicators field contains the full analysis JSON
             try {
               const fullAnalysis = JSON.parse(row.indicators);
+              // Add version and document info to the analysis
+              fullAnalysis.version = row.version;
+              fullAnalysis.documentsAnalyzed = row.documents_analyzed ? JSON.parse(row.documents_analyzed) : [];
+              fullAnalysis.aiModel = row.ai_model || '2.0-flash';
               resolve(fullAnalysis);
             } catch (parseError) {
               // Fallback to old format if parsing fails
@@ -498,6 +546,7 @@ class DatabaseService {
                 summary: row.summary,
                 recommendation: row.recommendation,
                 analyzedAt: row.analyzed_at,
+                aiModel: row.ai_model || '2.0-flash',
               } as any);
             }
           }
@@ -987,53 +1036,230 @@ class DatabaseService {
     });
   }
 
-  async updateContractAnalysis(contractId: string, analysis: any): Promise<void> {
+  async updateAnalysisProgress(contractId: string, progress: number, message: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      // First update the ai_score in contracts table
-      const wrapperScore = analysis.wrapperScore || 0;
+      const progressData = {
+        progress,
+        message,
+        timestamp: new Date().toISOString()
+      };
       
       this.db.run(
-        `UPDATE contracts SET ai_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [wrapperScore, contractId],
+        `INSERT OR REPLACE INTO ai_analysis (id, contract_id, type, indicators, created_at, updated_at) 
+         VALUES (?, ?, 'progress', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [`${contractId}-progress`, contractId, JSON.stringify(progressData)],
+        function (err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async getAnalysisProgress(contractId: string): Promise<{ progress: number; message: string } | null> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT indicators FROM ai_analysis WHERE contract_id = ? AND type = "progress"',
+        [contractId],
+        (err, row: any) => {
+          if (err) {
+            reject(err);
+          } else if (!row || !row.indicators) {
+            resolve(null);
+          } else {
+            try {
+              resolve(JSON.parse(row.indicators));
+            } catch (e) {
+              resolve(null);
+            }
+          }
+        }
+      );
+    });
+  }
+
+  async getAnalysisHistory(contractId: string): Promise<Array<{ version: number; analyzedAt: string; documentCount: number; wrapperScore?: number }>> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT version, analyzed_at, documents_analyzed, wrapper_score 
+         FROM ai_analysis 
+         WHERE contract_id = ? AND type = 'analysis' 
+         ORDER BY version DESC`,
+        [contractId],
+        (err, rows: any[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            const history = rows.map(row => ({
+              version: row.version,
+              analyzedAt: row.analyzed_at,
+              documentCount: row.documents_analyzed 
+                ? JSON.parse(row.documents_analyzed).length 
+                : 0,
+              wrapperScore: row.wrapper_score
+            }));
+            resolve(history);
+          }
+        }
+      );
+    });
+  }
+
+  // Analysis Notes methods
+  async getAnalysisNotes(contractId: string, version: number): Promise<AnalysisNote[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM analysis_notes WHERE contract_id = ? AND analysis_version = ? ORDER BY created_at DESC`,
+        [contractId, version],
+        (err, rows: any[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            const notes: AnalysisNote[] = rows.map(row => ({
+              id: row.id,
+              contractId: row.contract_id,
+              analysisVersion: row.analysis_version,
+              content: row.content,
+              type: row.type as NoteType,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at
+            }));
+            resolve(notes);
+          }
+        }
+      );
+    });
+  }
+
+  async addAnalysisNote(note: AnalysisNote): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT INTO analysis_notes (id, contract_id, analysis_version, content, type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [note.id, note.contractId, note.analysisVersion, note.content, note.type, note.createdAt, note.updatedAt],
         (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async updateAnalysisNote(noteId: string, content: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `UPDATE analysis_notes SET content = ?, updated_at = ? WHERE id = ?`,
+        [content, new Date().toISOString(), noteId],
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async deleteAnalysisNote(noteId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `DELETE FROM analysis_notes WHERE id = ?`,
+        [noteId],
+        (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async updateContractAnalysis(contractId: string, analysis: any, documentsAnalyzed?: any[]): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      // First get the latest version number
+      this.db.get(
+        `SELECT MAX(version) as maxVersion FROM ai_analysis WHERE contract_id = ? AND type = 'analysis'`,
+        [contractId],
+        async (err, row: any) => {
           if (err) {
             reject(err);
             return;
           }
           
-          // Then insert/update the full analysis in ai_analysis table
+          const newVersion = (row?.maxVersion || 0) + 1;
+          const wrapperScore = analysis.wrapperScore || 0;
+          
+          // Mark all previous analyses as not current
           this.db.run(
-            `INSERT OR REPLACE INTO ai_analysis 
-             (id, contract_id, wrapper_score, indicators, summary, recommendation, analyzed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              `analysis-${contractId}`,
-              contractId,
-              wrapperScore,
-              JSON.stringify(analysis),
-              analysis.summary || '',
-              analysis.recommendedAction || '',
-              analysis.analyzedAt || new Date().toISOString()
-            ],
-            async (err) => {
+            `UPDATE ai_analysis SET is_current = 0 WHERE contract_id = ? AND type = 'analysis'`,
+            [contractId],
+            (err) => {
               if (err) {
                 reject(err);
-              } else {
-                // Log analysis completion
-                await this.logActivity({
-                  id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                  contractId: contractId,
-                  contractTitle: '',
-                  activityType: ActivityType.ANALYSIS_COMPLETED,
-                  description: `Contract analysis completed with wrapper score: ${wrapperScore}%`,
-                  metadata: {
-                    wrapperScore: wrapperScore,
-                    contractType: analysis.contractType
-                  },
-                  createdAt: new Date().toISOString()
-                });
-                resolve();
+                return;
               }
+              
+              // Update the ai_score in contracts table
+              this.db.run(
+                `UPDATE contracts SET ai_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [wrapperScore, contractId],
+                (err) => {
+                  if (err) {
+                    reject(err);
+                    return;
+                  }
+                  
+                  // Insert new analysis version
+                  this.db.run(
+                    `INSERT INTO ai_analysis 
+                     (id, contract_id, type, version, is_current, wrapper_score, indicators, summary, recommendation, documents_analyzed, ai_model, analyzed_at)
+                     VALUES (?, ?, 'analysis', ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      `analysis-${contractId}-v${newVersion}`,
+                      contractId,
+                      newVersion,
+                      wrapperScore,
+                      JSON.stringify(analysis),
+                      analysis.summary || '',
+                      analysis.recommendedAction || '',
+                      documentsAnalyzed ? JSON.stringify(documentsAnalyzed) : null,
+                      analysis.aiModel || '2.0-flash',
+                      analysis.analyzedAt || new Date().toISOString()
+                    ],
+                    async (err) => {
+                      if (err) {
+                        reject(err);
+                      } else {
+                        // Log analysis completion
+                        await this.logActivity({
+                          id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                          contractId: contractId,
+                          contractTitle: '',
+                          activityType: ActivityType.ANALYSIS_COMPLETED,
+                          description: `Contract analysis completed with wrapper score: ${wrapperScore}% (Version ${newVersion})`,
+                          metadata: {
+                            wrapperScore: wrapperScore,
+                            contractType: analysis.contractType,
+                            version: newVersion,
+                            documentCount: documentsAnalyzed?.length || 0
+                          },
+                          createdAt: new Date().toISOString()
+                        });
+                        resolve();
+                      }
+                    }
+                  );
+                }
+              );
             }
           );
         }

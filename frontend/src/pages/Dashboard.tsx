@@ -86,8 +86,7 @@ export default function Dashboard() {
     investigating: 'text-yellow-600 dark:text-yellow-400',
     interested: 'text-green-600 dark:text-green-400',
     dismissed: 'text-gray-600 dark:text-gray-400',
-    applied: 'text-purple-600 dark:text-purple-400',
-    archived: 'text-gray-500 dark:text-gray-500'
+    applied: 'text-purple-600 dark:text-purple-400'
   };
 
   const priorityColors = {
