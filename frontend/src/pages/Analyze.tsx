@@ -10,6 +10,7 @@ import {
   FileText,
   Target,
 } from "lucide-react";
+import { API_CONFIG } from "../config/api";
 
 interface ContractAnalysis {
   contract: {
@@ -97,10 +98,10 @@ export default function Analyze() {
       let methodName: string;
 
       if (fetchMethod === "client") {
-        endpoint = "http://spicymini:3001/api/fetch-contract-client";
+        endpoint = API_CONFIG.endpoints.fetchContractClient;
         methodName = "Client API";
       } else {
-        endpoint = "http://spicymini:3001/api/fetch-contract";
+        endpoint = `${API_CONFIG.baseUrl}/api/fetch-contract`;
         methodName = "Official API";
       }
 

@@ -43,8 +43,59 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const db = new DatabaseService();
 
+// CORS configuration for VPN and local access
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // List of allowed origins
+    const defaultOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://spicymini:3000',
+      'http://spicymini:3001',
+      'http://spicymini:4333',  // Production React server
+      'http://localhost:4333',   // Local testing on prod port
+    ];
+    
+    // Add any additional origins from environment variable
+    const envOrigins = process.env.CORS_ALLOWED_ORIGINS
+      ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      : [];
+    
+    const allowedOrigins = [...defaultOrigins, ...envOrigins];
+    
+    // Check if the origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(allowed => origin === allowed);
+    
+    // Also allow any origin that matches your VPN subnet (example)
+    // Adjust this regex to match your VPN IP range
+    const vpnPattern = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/;
+    const isVpnOrigin = vpnPattern.test(origin);
+    
+    // Allow if explicitly listed or from VPN
+    if (isAllowed || isVpnOrigin) {
+      callback(null, true);
+    } else {
+      // In development, log rejected origins to help debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('CORS: Rejected origin:', origin);
+      }
+      // For production, you might want to be more permissive or restrictive
+      // For now, allow all origins but log them
+      console.log('CORS: Allowing origin:', origin);
+      callback(null, true);
+    }
+  },
+  credentials: true, // Allow credentials (cookies, authorization headers)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400 // Cache preflight requests for 24 hours
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request logging middleware

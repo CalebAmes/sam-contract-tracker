@@ -17,6 +17,7 @@ import {
 } from "../types";
 import StatusBadge from "./StatusBadge";
 import ContractPriorityComponent from "./ContractPriority";
+import { API_CONFIG } from "../config/api";
 
 interface ContractsTableProps {
   onContractClick: (contractId: string) => void;
@@ -42,7 +43,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   const fetchContracts = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://spicymini:3001/api/contracts");
+      const response = await fetch(API_CONFIG.endpoints.contracts);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch contracts: ${response.status}`);

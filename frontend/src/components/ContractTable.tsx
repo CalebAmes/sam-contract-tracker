@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ExternalLink, Calendar, Building, Save, Check } from "lucide-react";
+import { API_CONFIG } from "../config/api";
 
 interface Contract {
   id: string;
@@ -44,7 +45,7 @@ export default function ContractTable({
     try {
       const contractIds = contracts.map((c) => c.id);
       const response = await fetch(
-        "http://spicymini:3001/api/contracts/check-in-database",
+        API_CONFIG.endpoints.checkInDatabase,
         {
           method: "POST",
           headers: {
@@ -76,7 +77,7 @@ export default function ContractTable({
     try {
       // Use the existing client API endpoint to fetch full contract details
       const response = await fetch(
-        "http://spicymini:3001/api/fetch-contract-client",
+        API_CONFIG.endpoints.fetchContractClient,
         {
           method: "POST",
           headers: {

@@ -18,6 +18,7 @@ import ContractFlags from "./ContractFlags";
 import ContractNotes from "./ContractNotes";
 import ContractPriorityComponent from "./ContractPriority";
 import ContractActions from "./ContractActions";
+import { API_CONFIG } from "../config/api";
 
 interface ContractModalProps {
   contractId: string;
@@ -51,7 +52,7 @@ const ContractModal: React.FC<ContractModalProps> = ({
       setError(null);
 
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}`
+        API_CONFIG.contract(contractId)
       );
 
       if (!response.ok) {

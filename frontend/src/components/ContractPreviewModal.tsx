@@ -14,6 +14,7 @@ import {
   Save,
   CheckCircle,
 } from "lucide-react";
+import { API_CONFIG } from "../config/api";
 
 interface ContractPreviewModalProps {
   opportunityId: string;
@@ -50,7 +51,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
       setSaved(false);
 
       const response = await fetch(
-        `http://spicymini:3001/api/preview-contract-client`,
+        API_CONFIG.endpoints.previewContractClient,
         {
           method: "POST",
           headers: {
@@ -85,7 +86,7 @@ const ContractPreviewModal: React.FC<ContractPreviewModalProps> = ({
       setError(null);
 
       const response = await fetch(
-        `http://spicymini:3001/api/fetch-contract-client`,
+        API_CONFIG.endpoints.fetchContractClient,
         {
           method: "POST",
           headers: {

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { ActivityLog, ActivityType } from "../types";
 import ActivityModal from "../components/ActivityModal";
+import { API_CONFIG } from "../config/api";
 
 interface ContractMetrics {
   total: number;
@@ -51,9 +52,9 @@ export default function Dashboard() {
 
       const [metricsResponse, activityResponse, allActivityResponse] =
         await Promise.all([
-          fetch("http://spicymini:3001/api/dashboard/metrics"),
-          fetch("http://spicymini:3001/api/dashboard/activity?limit=5"),
-          fetch("http://spicymini:3001/api/dashboard/activity?limit=50"),
+          fetch(`${API_CONFIG.baseUrl}/api/dashboard/metrics`),
+          fetch(`${API_CONFIG.baseUrl}/api/dashboard/activity?limit=5`),
+          fetch(`${API_CONFIG.baseUrl}/api/dashboard/activity?limit=50`),
         ]);
 
       if (!metricsResponse.ok) {

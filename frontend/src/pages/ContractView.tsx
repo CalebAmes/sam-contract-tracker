@@ -26,6 +26,7 @@ import AnalysisModal from "../components/AnalysisModal";
 import AnalysisResults from "../components/AnalysisResults";
 import AnalysisVersionSelector from "../components/AnalysisVersionSelector";
 import AttachmentList from "../components/AttachmentList";
+import { API_CONFIG } from "../config/api";
 // @ts-ignore
 import DOMPurify from "dompurify";
 
@@ -53,7 +54,7 @@ const ContractView: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`http://spicymini:3001/api/contracts/${id}`);
+      const response = await fetch(API_CONFIG.contract(id));
 
       if (!response.ok) {
         throw new Error(`Failed to fetch contract: ${response.status}`);
@@ -107,7 +108,7 @@ const ContractView: React.FC = () => {
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${id}/analysis/${version}`
+        `${API_CONFIG.baseUrl}/api/contracts/${id}/analysis/${version}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -124,7 +125,7 @@ const ContractView: React.FC = () => {
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${id}/archive`,
+        `${API_CONFIG.baseUrl}/api/contracts/${id}/archive`,
         {
           method: "PUT",
           headers: {
@@ -159,7 +160,7 @@ const ContractView: React.FC = () => {
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${id}/unarchive`,
+        `${API_CONFIG.baseUrl}/api/contracts/${id}/unarchive`,
         {
           method: "PUT",
           headers: {
@@ -196,7 +197,7 @@ const ContractView: React.FC = () => {
       setFetchingAttachments(true);
 
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${id}/fetch-attachments`,
+        `${API_CONFIG.baseUrl}/api/contracts/${id}/fetch-attachments`,
         {
           method: "POST",
           headers: {
@@ -699,7 +700,7 @@ const ContractView: React.FC = () => {
                     onClick={async () => {
                       try {
                         await fetch(
-                          `http://spicymini:3001/api/contracts/${contract.id}/analysis-status`,
+                          `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/analysis-status`,
                           {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },

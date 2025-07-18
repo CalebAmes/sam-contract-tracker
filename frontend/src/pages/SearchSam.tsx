@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Search, AlertCircle, CheckCircle } from "lucide-react";
 import ContractTable from "../components/ContractTable";
 import ContractPreviewModal from "../components/ContractPreviewModal";
+import { API_CONFIG } from "../config/api";
 
 interface Contract {
   id: string;
@@ -285,7 +286,7 @@ export default function SearchSam() {
     setError(null);
 
     try {
-      const response = await fetch("http://spicymini:3001/api/search", {
+      const response = await fetch(API_CONFIG.endpoints.search, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -363,7 +364,7 @@ export default function SearchSam() {
       setLastSearchParams(searchParams);
       setCurrentOffset(offset);
 
-      const response = await fetch("http://spicymini:3001/api/search-direct", {
+      const response = await fetch(API_CONFIG.endpoints.searchDirect, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -417,7 +418,7 @@ export default function SearchSam() {
   const handleStatusChange = async (contractId: string, newStatus: string) => {
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/status`,
+        API_CONFIG.endpoints.contractStatus(contractId),
         {
           method: "PUT",
           headers: {
