@@ -484,7 +484,9 @@ export default function SearchSam() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold font-heading mb-2">Search SAM.gov</h2>
+        <h2 className="text-2xl font-bold font-heading mb-2">
+          Search SAM.gov (beta)
+        </h2>
         <p className="text-muted-foreground">
           Search government contracts by URL or using filters
         </p>
