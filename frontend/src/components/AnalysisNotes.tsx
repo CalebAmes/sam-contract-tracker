@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, Trash2, Save, X, MessageSquare } from "lucide-react";
 import { NoteType } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface AnalysisNote {
   id: string;
@@ -41,7 +42,7 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({
       setError(null);
 
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/analysis/${analysisVersion}/notes`
       );
 
       if (!response.ok) {
@@ -62,7 +63,7 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/analysis/${analysisVersion}/notes`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/analysis/${analysisVersion}/notes`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -89,7 +90,7 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/analysis-notes/${noteId}`,
+        `${API_CONFIG.baseUrl}/api/analysis-notes/${noteId}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -122,7 +123,7 @@ const AnalysisNotes: React.FC<AnalysisNotesProps> = ({
   const deleteNote = async (noteId: string) => {
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/analysis-notes/${noteId}`,
+        `${API_CONFIG.baseUrl}/api/analysis-notes/${noteId}`,
         {
           method: "DELETE",
         }

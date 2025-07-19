@@ -14,6 +14,7 @@ import {
   Clock,
 } from "lucide-react";
 import { ContractNote, NoteType } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface ContractNotesProps {
   contractId: string;
@@ -82,7 +83,7 @@ const ContractNotes: React.FC<ContractNotesProps> = ({
     try {
       setLoading(true);
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/notes`
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/notes`
       );
 
       if (!response.ok) {
@@ -107,7 +108,7 @@ const ContractNotes: React.FC<ContractNotesProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/notes`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/notes`,
         {
           method: "POST",
           headers: {
@@ -141,7 +142,7 @@ const ContractNotes: React.FC<ContractNotesProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/notes/${noteId}`,
+        `${API_CONFIG.baseUrl}/api/contracts/notes/${noteId}`,
         {
           method: "PUT",
           headers: {
@@ -183,7 +184,7 @@ const ContractNotes: React.FC<ContractNotesProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/notes/${noteId}`,
+        `${API_CONFIG.baseUrl}/api/contracts/notes/${noteId}`,
         {
           method: "DELETE",
         }

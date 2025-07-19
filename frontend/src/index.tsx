@@ -3,6 +3,12 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { setupApiDebugger } from './utils/api-debug';
+
+// Enable API debugging in development
+if (process.env.NODE_ENV === 'development') {
+  setupApiDebugger();
+}
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

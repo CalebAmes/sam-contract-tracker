@@ -14,6 +14,7 @@ import {
 import { Contract, AnalysisStatus, GeminiModel } from "../types";
 import DocumentUpload from "./DocumentUpload";
 import ModelSelectionCard from "./ModelSelectionCard";
+import { API_CONFIG } from "../config/api";
 
 interface UploadedFile {
   id: string;
@@ -120,7 +121,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     try {
       // Fetch contract status
       const contractResponse = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}`
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}`
       );
       if (!contractResponse.ok) throw new Error("Failed to fetch status");
 
@@ -129,7 +130,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
       // Fetch progress data
       const progressResponse = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}/analysis-progress`
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/analysis-progress`
       );
       if (progressResponse.ok) {
         const progressData = await progressResponse.json();
@@ -178,7 +179,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     try {
       // Start the analysis process
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}/analyze`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/analyze`,
         {
           method: "POST",
           headers: {

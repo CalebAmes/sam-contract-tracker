@@ -10,6 +10,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { Contract, ContractStatus } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface ContractActionsProps {
   contract: Contract;
@@ -33,7 +34,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
     try {
       const endpoint = contract.isArchived ? "unarchive" : "archive";
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}/${endpoint}`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/${endpoint}`,
         {
           method: "PUT",
           headers: {
@@ -63,7 +64,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}/status`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/status`,
         {
           method: "PUT",
           headers: {
@@ -99,7 +100,7 @@ const ContractActions: React.FC<ContractActionsProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contract.id}`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contract.id}`,
         {
           method: "DELETE",
         }

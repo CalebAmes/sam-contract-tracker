@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CircleDot, ChevronDown, Check } from "lucide-react";
 import { ContractStatus } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface ContractStatusSelectorProps {
   contractId: string;
@@ -61,7 +62,7 @@ const ContractStatusSelector: React.FC<ContractStatusSelectorProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/status`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/status`,
         {
           method: "PUT",
           headers: {

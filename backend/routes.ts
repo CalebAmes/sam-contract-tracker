@@ -1186,10 +1186,21 @@ export const analyzeContract =
                 analyzedAt: new Date().toISOString(),
               };
             } catch (geminiError) {
-              console.error(
-                `Gemini analysis failed for contract ${id}:`,
-                geminiError
-              );
+              // Log cleaner error message for Gemini API errors
+              if (axios.isAxiosError(geminiError) && geminiError.response?.data?.error) {
+                const apiError = geminiError.response.data.error;
+                console.error(
+                  `Gemini API error for contract ${id}:`,
+                  `\n  Status: ${geminiError.response.status}`,
+                  `\n  Message: ${apiError.message || apiError}`,
+                  apiError.code ? `\n  Code: ${apiError.code}` : ''
+                );
+              } else {
+                console.error(
+                  `Gemini analysis failed for contract ${id}:`,
+                  geminiError instanceof Error ? geminiError.message : geminiError
+                );
+              }
               throw geminiError;
             }
           } else {
@@ -1314,7 +1325,40 @@ export const analyzeContract =
 
           console.log(`Analysis completed for contract ${id}`);
         } catch (error) {
-          console.error(`Error completing analysis for contract ${id}:`, error);
+          // Extract meaningful error information
+          let errorMessage = 'Unknown error';
+          let errorDetails = '';
+          
+          if (axios.isAxiosError(error)) {
+            errorMessage = `API Error: ${error.response?.status || 'Unknown status'}`;
+            
+            // Extract the actual error message from Gemini API response
+            if (error.response?.data?.error) {
+              const apiError = error.response.data.error;
+              errorDetails = `\n  Message: ${apiError.message || apiError}`;
+              if (apiError.code) {
+                errorDetails += `\n  Code: ${apiError.code}`;
+              }
+              if (apiError.status) {
+                errorDetails += `\n  Status: ${apiError.status}`;
+              }
+            } else if (error.response?.statusText) {
+              errorDetails = `\n  Status Text: ${error.response.statusText}`;
+            }
+            
+            // Add request details for debugging
+            if (error.config?.url) {
+              errorDetails += `\n  URL: ${error.config.url}`;
+            }
+          } else if (error instanceof Error) {
+            errorMessage = error.message;
+            // Only include stack trace in development
+            if (process.env.NODE_ENV === 'development') {
+              errorDetails = `\n  Stack: ${error.stack?.split('\n').slice(0, 3).join('\n  ')}`;
+            }
+          }
+          
+          console.error(`Error completing analysis for contract ${id}: ${errorMessage}${errorDetails}`);
           await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
 
           // Clean up uploaded files even on error

@@ -8,6 +8,14 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || (
     : 'http://spicymini:3001'
 );
 
+// Debug logging
+console.log('API Configuration:', {
+  NODE_ENV: process.env.NODE_ENV,
+  REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL,
+  isDevelopment,
+  API_BASE_URL
+});
+
 // Export for use throughout the app
 export const API_CONFIG = {
   baseUrl: API_BASE_URL,

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { Upload, X, File, AlertCircle, CheckCircle } from "lucide-react";
+import { API_CONFIG } from "../config/api";
 
 interface UploadedFile {
   id: string;
@@ -100,7 +101,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
 
         try {
           const response = await fetch(
-            `http://spicymini:3001/api/contracts/${contractId}/upload-documents`,
+            `${API_CONFIG.baseUrl}/api/contracts/${contractId}/upload-documents`,
             {
               method: "POST",
               body: formData,

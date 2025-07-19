@@ -1,6 +1,7 @@
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
+import { FileConverter, ConvertedFile } from './fileConverter';
 
 export interface WrapperAnalysis {
   wrapperScore: number;
@@ -105,25 +106,58 @@ export class GeminiAnalyzer {
         }
       ];
 
-      // Add uploaded documents as inline data
-      for (let i = 0; i < uploadedFilePaths.length; i++) {
-        const filePath = uploadedFilePaths[i];
-        if (progressCallback) {
-          await progressCallback(
-            40 + (i / uploadedFilePaths.length) * 20, 
-            `Reading document ${i + 1} of ${uploadedFilePaths.length}...`
-          );
-        }
-        
-        const fileData = await fs.readFile(filePath);
-        const mimeType = this.getMimeType(filePath);
-        
-        parts.push({
-          inline_data: {
-            mime_type: mimeType,
-            data: fileData.toString('base64')
+      // Track converted files for cleanup
+      const convertedFiles: ConvertedFile[] = [];
+      
+      try {
+        // Add uploaded documents as inline data
+        for (let i = 0; i < uploadedFilePaths.length; i++) {
+          const filePath = uploadedFilePaths[i];
+          if (progressCallback) {
+            await progressCallback(
+              40 + (i / uploadedFilePaths.length) * 20, 
+              `Processing document ${i + 1} of ${uploadedFilePaths.length}...`
+            );
           }
-        });
+          
+          let actualFilePath = filePath;
+          let mimeType = FileConverter.getMimeType(filePath);
+          
+          // Check if file needs conversion
+          if (!FileConverter.isSupportedByGemini(mimeType)) {
+            console.log(`File ${path.basename(filePath)} (${mimeType}) needs conversion`);
+            
+            const converted = await FileConverter.convertFile(filePath);
+            if (converted) {
+              convertedFiles.push(converted);
+              actualFilePath = converted.convertedPath;
+              mimeType = converted.convertedMimeType;
+              console.log(`Converted ${path.basename(filePath)} to ${mimeType}`);
+              
+              if (converted.conversionNotes && progressCallback) {
+                await progressCallback(
+                  40 + (i / uploadedFilePaths.length) * 20,
+                  `${converted.conversionNotes}`
+                );
+              }
+            }
+          }
+          
+          const fileData = await fs.readFile(actualFilePath);
+          
+          parts.push({
+            inline_data: {
+              mime_type: mimeType,
+              data: fileData.toString('base64')
+            }
+          });
+        }
+      } finally {
+        // Always clean up converted files
+        if (convertedFiles.length > 0) {
+          console.log(`Cleaning up ${convertedFiles.length} converted files`);
+          await FileConverter.cleanupConversions(convertedFiles);
+        }
       }
 
       if (progressCallback) {
@@ -235,21 +269,4 @@ export class GeminiAnalyzer {
     }
   }
 
-  private static getMimeType(filePath: string): string {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-      case '.pdf':
-        return 'application/pdf';
-      case '.doc':
-        return 'application/msword';
-      case '.docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case '.xlsx':
-        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      case '.txt':
-        return 'text/plain';
-      default:
-        return 'application/octet-stream';
-    }
-  }
 }

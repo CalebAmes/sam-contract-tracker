@@ -6,6 +6,7 @@ import {
   StrategicFlag,
   PostAwardFlag,
 } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface ContractFlagsProps {
   contractId: string;
@@ -119,7 +120,7 @@ const ContractFlags: React.FC<ContractFlagsProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/flags`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/flags`,
         {
           method: "PUT",
           headers: {
@@ -148,7 +149,7 @@ const ContractFlags: React.FC<ContractFlagsProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/flags`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/flags`,
         {
           method: "PUT",
           headers: {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ChevronDown, Clock, FileText, History } from "lucide-react";
+import { API_CONFIG } from "../config/api";
 
 interface AnalysisVersion {
   version: number;
@@ -31,7 +32,7 @@ const AnalysisVersionSelector: React.FC<AnalysisVersionSelectorProps> = ({
     try {
       setLoading(true);
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/analysis-history`
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/analysis-history`
       );
       if (response.ok) {
         const data = await response.json();

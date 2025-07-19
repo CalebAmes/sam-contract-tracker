@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Flag, ChevronDown, Check } from "lucide-react";
 import { ContractPriority as Priority } from "../types";
+import { API_CONFIG } from "../config/api";
 
 interface ContractPriorityProps {
   contractId: string;
@@ -55,7 +56,7 @@ const ContractPriority: React.FC<ContractPriorityProps> = ({
 
     try {
       const response = await fetch(
-        `http://spicymini:3001/api/contracts/${contractId}/priority`,
+        `${API_CONFIG.baseUrl}/api/contracts/${contractId}/priority`,
         {
           method: "PUT",
           headers: {
