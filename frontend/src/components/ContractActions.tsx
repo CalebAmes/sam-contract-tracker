@@ -123,10 +123,13 @@ const ContractActions: React.FC<ContractActionsProps> = ({
 
   const statusOptions = [
     { value: ContractStatus.NEW, label: "New" },
-    { value: ContractStatus.INVESTIGATING, label: "Investigating" },
     { value: ContractStatus.INTERESTED, label: "Interested" },
-    { value: ContractStatus.DISMISSED, label: "Dismissed" },
-    { value: ContractStatus.APPLIED, label: "Applied" },
+    { value: ContractStatus.PRE_BID, label: "Pre-Bid" },
+    { value: ContractStatus.SUBMITTED, label: "Submitted" },
+    { value: ContractStatus.AWARDED, label: "Awarded" },
+    { value: ContractStatus.LOST, label: "Lost" },
+    { value: ContractStatus.DISCARDED, label: "Discarded" },
+    { value: ContractStatus.CASE_STUDY, label: "Case Study" },
   ];
 
   if (showAll) {
