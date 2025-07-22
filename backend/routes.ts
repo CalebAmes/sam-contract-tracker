@@ -387,6 +387,44 @@ export const getContracts =
     }
   };
 
+export const getContractNavigation =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        console.error("400 - No contract ID provided");
+        return res.status(400).json({ error: "No contract ID provided" });
+      }
+
+      // Get all contract IDs in order
+      const contractIds = await db.getContractIds();
+      
+      // Find current contract index
+      const currentIndex = contractIds.findIndex(cid => cid === id);
+      
+      if (currentIndex === -1) {
+        console.error(`404 - Contract not found in navigation: ${id}`);
+        return res.status(404).json({ error: "Contract not found" });
+      }
+
+      // Calculate previous and next IDs
+      const previousId = currentIndex > 0 ? contractIds[currentIndex - 1] : null;
+      const nextId = currentIndex < contractIds.length - 1 ? contractIds[currentIndex + 1] : null;
+
+      res.json({
+        currentId: id,
+        previousId,
+        nextId,
+        currentIndex: currentIndex + 1, // 1-based index for display
+        totalContracts: contractIds.length,
+      });
+    } catch (error: any) {
+      console.error("500 - Error fetching contract navigation:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
 export const getContractById =
   (db: DatabaseService) => async (req: Request, res: Response) => {
     try {

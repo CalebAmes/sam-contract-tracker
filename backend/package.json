@@ -30,6 +30,7 @@
   "scripts": {
     "start": "tsc & node dist/index.js",
     "dev": "nodemon --exec ts-node index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "migrate:statuses": "ts-node migrate-contract-statuses.ts"
   }
 }

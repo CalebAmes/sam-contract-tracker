@@ -18,6 +18,7 @@ import ContractFlags from "./ContractFlags";
 import ContractNotes from "./ContractNotes";
 import ContractPriorityComponent from "./ContractPriority";
 import ContractActions from "./ContractActions";
+import LoadingOverlay from "./LoadingOverlay";
 import { API_CONFIG } from "../config/api";
 
 interface ContractModalProps {
@@ -139,9 +140,7 @@ const ContractModal: React.FC<ContractModalProps> = ({
         {/* Content */}
         <div className="flex-1 overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            </div>
+            <LoadingOverlay message="Loading contract..." className="h-96" />
           ) : error ? (
             <div className="flex items-center justify-center h-96 text-red-600 dark:text-red-400">
               <div className="text-center">
@@ -448,12 +447,9 @@ const ContractModal: React.FC<ContractModalProps> = ({
                     ) : contract.analysisStatus ===
                       AnalysisStatus.IN_PROGRESS ? (
                       <div className="text-center py-12 text-muted-foreground">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                        <p className="text-lg mb-2">Analysis in progress</p>
-                        <p>
-                          AI is analyzing this contract for wrapper
-                          indicators...
-                        </p>
+                        <LoadingOverlay 
+                          message="AI is analyzing this contract for wrapper indicators..." 
+                        />
                       </div>
                     ) : contract.analysisStatus === AnalysisStatus.COMPLETED &&
                       contract.aiAnalysis ? (

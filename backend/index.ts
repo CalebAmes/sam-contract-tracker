@@ -8,6 +8,7 @@ import {
   previewContractClient,
   getContracts,
   getContractById,
+  getContractNavigation,
   healthCheckHandler,
   updateContractStatus,
   updateContractFlags,
@@ -120,6 +121,7 @@ app.post("/api/fetch-contract-client", fetchClientApi(db));
 app.post("/api/preview-contract-client", previewContractClient(db));
 app.get("/api/contracts", getContracts(db));
 app.get("/api/contracts/:id", getContractById(db));
+app.get("/api/contracts/:id/navigation", getContractNavigation(db));
 
 // Search routes
 app.post("/api/search", searchFromUrl(db));

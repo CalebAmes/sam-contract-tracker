@@ -99,7 +99,7 @@ export class ClientApiParser {
         status = ContractStatus.NEW;
         break;
       case 'archived':
-        status = ContractStatus.DISMISSED;
+        status = ContractStatus.DISCARDED;
         break;
       default:
         status = ContractStatus.NEW;

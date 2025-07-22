@@ -5,10 +5,13 @@ import path from 'path';
 // Backend types - duplicated for now to avoid shared dependency
 export enum ContractStatus {
   NEW = 'new',
-  INVESTIGATING = 'investigating',
   INTERESTED = 'interested',
-  DISMISSED = 'dismissed',
-  APPLIED = 'applied'
+  PRE_BID = 'pre-bid',
+  SUBMITTED = 'submitted',
+  AWARDED = 'awarded',
+  LOST = 'lost',
+  DISCARDED = 'discarded',
+  CASE_STUDY = 'case-study'
 }
 
 export enum AnalysisStatus {
@@ -1377,6 +1380,22 @@ class DatabaseService {
             });
             
             resolve(results);
+          }
+        }
+      );
+    });
+  }
+
+  async getContractIds(): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT id FROM contracts WHERE is_archived = 0 ORDER BY created_at DESC`,
+        [],
+        (err, rows: any[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows.map(row => row.id));
           }
         }
       );

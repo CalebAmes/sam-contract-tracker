@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Calendar,
   Building,
@@ -26,6 +29,7 @@ import AnalysisModal from "../components/AnalysisModal";
 import AnalysisResults from "../components/AnalysisResults";
 import AnalysisVersionSelector from "../components/AnalysisVersionSelector";
 import AttachmentList from "../components/AttachmentList";
+import LoadingOverlay from "../components/LoadingOverlay";
 import { API_CONFIG } from "../config/api";
 // @ts-ignore
 import DOMPurify from "dompurify";
@@ -46,6 +50,12 @@ const ContractView: React.FC = () => {
   const [versionAnalysis, setVersionAnalysis] = useState<any>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showUnarchiveConfirm, setShowUnarchiveConfirm] = useState(false);
+  const [navigation, setNavigation] = useState<{
+    previousId: string | null;
+    nextId: string | null;
+    currentIndex: number;
+    totalContracts: number;
+  } | null>(null);
 
   const fetchContract = useCallback(async () => {
     if (!id) return;
@@ -69,11 +79,29 @@ const ContractView: React.FC = () => {
     }
   }, [id]);
 
+  const fetchNavigation = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      const response = await fetch(API_CONFIG.endpoints.contract(id) + '/navigation');
+      
+      if (response.ok) {
+        const data = await response.json();
+        setNavigation(data);
+      } else {
+        console.error('Failed to fetch navigation data');
+      }
+    } catch (err) {
+      console.error('Error fetching navigation:', err);
+    }
+  }, [id]);
+
   useEffect(() => {
     if (id) {
       fetchContract();
+      fetchNavigation();
     }
-  }, [id, fetchContract]);
+  }, [id, fetchContract, fetchNavigation]);
 
   useEffect(() => {
     // Check if we should open analysis modal from URL parameter
@@ -85,6 +113,24 @@ const ContractView: React.FC = () => {
       navigate(`/contracts/${id}`, { replace: true });
     }
   }, [searchParams, contract, id, navigate]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return; // Don't navigate when typing in form fields
+      }
+
+      if (e.key === 'ArrowLeft' && navigation?.previousId) {
+        navigate(`/contracts/${navigation.previousId}`);
+      } else if (e.key === 'ArrowRight' && navigation?.nextId) {
+        navigate(`/contracts/${navigation.nextId}`);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [navigation, navigate]);
 
   const handleOpenAnalysisModal = () => {
     setShowAnalysisModal(true);
@@ -271,15 +317,13 @@ const ContractView: React.FC = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/contracts")}
-            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
+            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-border rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Contracts
           </button>
         </div>
-        <div className="flex items-center justify-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
+        <LoadingOverlay message="Loading contract details..." className="h-96" />
       </div>
     );
   }
@@ -290,7 +334,7 @@ const ContractView: React.FC = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/contracts")}
-            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
+            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-border rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Contracts
@@ -319,7 +363,7 @@ const ContractView: React.FC = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/contracts")}
-            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
+            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-border rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Contracts
@@ -334,15 +378,54 @@ const ContractView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Back Button */}
+      {/* Header with Back Button and Navigation */}
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate("/contracts")}
-          className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Contracts
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/contracts")}
+            className="inline-flex items-center gap-2 px-3 py-1 text-sm border border-border rounded-lg hover:bg-muted"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Contracts
+          </button>
+          
+          {navigation && (
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-px bg-border" />
+              
+              <button
+                onClick={() => navigation.previousId && navigate(`/contracts/${navigation.previousId}`)}
+                disabled={!navigation.previousId}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  navigation.previousId
+                    ? 'hover:bg-muted text-foreground'
+                    : 'text-muted-foreground cursor-not-allowed opacity-50'
+                }`}
+                title={navigation.previousId ? 'Previous contract (←)' : 'No previous contract'}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              <span className="text-sm text-muted-foreground px-2">
+                {navigation.currentIndex} of {navigation.totalContracts}
+              </span>
+              
+              <button
+                onClick={() => navigation.nextId && navigate(`/contracts/${navigation.nextId}`)}
+                disabled={!navigation.nextId}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  navigation.nextId
+                    ? 'hover:bg-muted text-foreground'
+                    : 'text-muted-foreground cursor-not-allowed opacity-50'
+                }`}
+                title={navigation.nextId ? 'Next contract (→)' : 'No next contract'}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+        
         <div className="flex items-center gap-2">
           <StatusBadge status={contract.status} type="contract" />
           <StatusBadge
@@ -388,7 +471,7 @@ const ContractView: React.FC = () => {
               href={contract.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-muted"
             >
               <ExternalLink className="w-4 h-4" />
               View on SAM.gov
@@ -691,11 +774,10 @@ const ContractView: React.FC = () => {
                 </div>
               ) : contract.analysisStatus === AnalysisStatus.IN_PROGRESS ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                  <p className="text-lg mb-2">Analysis in progress</p>
-                  <p className="mb-4">
-                    AI is analyzing this contract for wrapper indicators...
-                  </p>
+                  <LoadingOverlay 
+                    message="AI is analyzing this contract for wrapper indicators..." 
+                    className="mb-4"
+                  />
                   <button
                     onClick={async () => {
                       try {
@@ -791,7 +873,7 @@ const ContractView: React.FC = () => {
       {/* Archive Confirmation Modal */}
       {showArchiveConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-card rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Archive Contract</h3>
             <p className="text-muted-foreground mb-6">
               Are you sure you want to archive this contract? This will hide it
@@ -800,7 +882,7 @@ const ContractView: React.FC = () => {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowArchiveConfirm(false)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted"
               >
                 Cancel
               </button>
@@ -818,7 +900,7 @@ const ContractView: React.FC = () => {
       {/* Unarchive Confirmation Modal */}
       {showUnarchiveConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-card rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Unarchive Contract</h3>
             <p className="text-muted-foreground mb-6">
               Are you sure you want to unarchive this contract? This will
@@ -827,7 +909,7 @@ const ContractView: React.FC = () => {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowUnarchiveConfirm(false)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted"
               >
                 Cancel
               </button>

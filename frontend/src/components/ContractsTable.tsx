@@ -17,6 +17,8 @@ import {
 } from "../types";
 import StatusBadge from "./StatusBadge";
 import ContractPriorityComponent from "./ContractPriority";
+import ContractFilters from "./ContractFilters";
+import LoadingOverlay from "./LoadingOverlay";
 import { API_CONFIG } from "../config/api";
 
 interface ContractsTableProps {
@@ -35,6 +37,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   const [sortField, setSortField] = useState<keyof Contract>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState<any>({});
 
   useEffect(() => {
     fetchContracts();
@@ -80,13 +83,66 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
       }
 
       // Search filter
-      return (
+      const matchesSearch = !searchTerm || (
         contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         contract.organizationId
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
         contract.description.toLowerCase().includes(searchTerm.toLowerCase())
       );
+      
+      if (!matchesSearch) return false;
+
+      // Apply advanced filters
+      if (filters.status && contract.status !== filters.status) {
+        return false;
+      }
+      
+      if (filters.analysisStatus && contract.analysisStatus !== filters.analysisStatus) {
+        return false;
+      }
+      
+      if (filters.priority && contract.priority !== filters.priority) {
+        return false;
+      }
+      
+      // Wrapper score filters
+      if (filters.wrapperScoreMin && contract.aiAnalysis) {
+        const score = contract.aiAnalysis.wrapperScore;
+        if (score < parseInt(filters.wrapperScoreMin)) return false;
+      }
+      
+      if (filters.wrapperScoreMax && contract.aiAnalysis) {
+        const score = contract.aiAnalysis.wrapperScore;
+        if (score > parseInt(filters.wrapperScoreMax)) return false;
+      }
+      
+      // Date filters
+      if (filters.deadlineFrom) {
+        const deadline = new Date(contract.deadline);
+        const filterDate = new Date(filters.deadlineFrom);
+        if (deadline < filterDate) return false;
+      }
+      
+      if (filters.deadlineTo) {
+        const deadline = new Date(contract.deadline);
+        const filterDate = new Date(filters.deadlineTo);
+        if (deadline > filterDate) return false;
+      }
+      
+      if (filters.postedFrom) {
+        const posted = new Date(contract.postedDate);
+        const filterDate = new Date(filters.postedFrom);
+        if (posted < filterDate) return false;
+      }
+      
+      if (filters.postedTo) {
+        const posted = new Date(contract.postedDate);
+        const filterDate = new Date(filters.postedTo);
+        if (posted > filterDate) return false;
+      }
+
+      return true;
     })
     .sort((a, b) => {
       let aValue = a[sortField];
@@ -169,10 +225,7 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
   if (loading) {
     return (
       <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading contracts...</p>
-        </div>
+        <LoadingOverlay message="Loading contracts..." className="py-12" />
       </div>
     );
   }
@@ -246,6 +299,12 @@ const ContractsTable: React.FC<ContractsTableProps> = ({
             Archived
           </button>
         </div>
+
+        {/* Advanced Filters */}
+        <ContractFilters 
+          onFiltersChange={setFilters}
+          currentFilters={filters}
+        />
 
         <div className="text-sm text-muted-foreground">
           {sortedAndFilteredContracts.length} contract

@@ -120,10 +120,13 @@ export enum WrapperIndicatorType {
 
 export enum ContractStatus {
   NEW = 'new',
-  INVESTIGATING = 'investigating',
   INTERESTED = 'interested',
-  DISMISSED = 'dismissed',
-  APPLIED = 'applied'
+  PRE_BID = 'pre-bid',
+  SUBMITTED = 'submitted',
+  AWARDED = 'awarded',
+  LOST = 'lost',
+  DISCARDED = 'discarded',
+  CASE_STUDY = 'case-study'
 }
 
 // Disqualifying Flags (Red)

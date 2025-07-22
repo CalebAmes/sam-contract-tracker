@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { ActivityLog, ActivityType } from "../types";
 import ActivityModal from "../components/ActivityModal";
+import LoadingOverlay from "../components/LoadingOverlay";
 import { API_CONFIG } from "../config/api";
 
 interface ContractMetrics {

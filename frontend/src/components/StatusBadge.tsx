@@ -48,25 +48,40 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({
             label: 'New',
             classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
           };
-        case ContractStatus.INVESTIGATING:
-          return {
-            label: 'Investigating',
-            classes: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-          };
         case ContractStatus.INTERESTED:
           return {
             label: 'Interested',
             classes: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
           };
-        case ContractStatus.DISMISSED:
+        case ContractStatus.PRE_BID:
           return {
-            label: 'Dismissed',
+            label: 'Pre-Bid',
+            classes: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+          };
+        case ContractStatus.SUBMITTED:
+          return {
+            label: 'Submitted',
+            classes: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+          };
+        case ContractStatus.AWARDED:
+          return {
+            label: 'Awarded',
+            classes: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+          };
+        case ContractStatus.LOST:
+          return {
+            label: 'Lost',
+            classes: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+          };
+        case ContractStatus.DISCARDED:
+          return {
+            label: 'Discarded',
             classes: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
           };
-        case ContractStatus.APPLIED:
+        case ContractStatus.CASE_STUDY:
           return {
-            label: 'Applied',
-            classes: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+            label: 'Case Study',
+            classes: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
           };
         default:
           return {
