@@ -6,23 +6,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SAM Tracker - Find Hidden Reseller Deals on SAM.gov</title>
   <meta name="description"
-    content="AI that detects 'wrapper contracts' on SAM.gov — hidden reseller opportunities with named vendors and pass‑through language. Join the waitlist for early access." />
+    content="AI that detects 'wrapper contracts' on SAM.gov: hidden reseller opportunities with named vendors and pass‑through language. Join the waitlist for early access." />
   <meta name="robots" content="index, follow" />
-  <meta property="og:title" content="SAM Tracker — Hidden Reseller Opportunity Detector for SAM.gov" />
+  <meta property="og:title" content="SAM Tracker: Hidden Reseller Opportunity Detector for SAM.gov" />
   <meta property="og:description"
     content="Paste any SAM.gov link. Our AI finds wrapper contracts, quantifies likelihood, and gives you a reseller playbook." />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:site_name" content="SAM Tracker" />
-  <meta property="og:url" content="" id="og-url" />
-  <meta property="og:image" content="" id="og-image" />
+  <meta property="og:url" content="https://samtracker.com/" id="og-url" />
+  <meta property="og:image" content="https://samtracker.com/share_image.jpg" id="og-image" />
   <meta property="twitter:card" content="summary_large_image" />
-  <meta property="twitter:title" content="SAM Tracker — Hidden Reseller Opportunity Detector for SAM.gov" />
+  <meta property="twitter:title" content="SAM Tracker: Hidden Reseller Opportunity Detector for SAM.gov" />
   <meta property="twitter:description"
     content="Paste any SAM.gov link. Our AI finds wrapper contracts, quantifies likelihood, and gives you a reseller playbook." />
-  <meta property="twitter:image" content="" id="twitter-image" />
+  <meta property="twitter:image" content="https://samtracker.com/share_image.jpg" id="twitter-image" />
   <meta name="theme-color" content="#0b0b0c" />
-  <link rel="canonical" href="" id="canonical-link" />
+  <link rel="canonical" href="https://samtracker.com/" id="canonical-link" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -380,9 +380,6 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 
-    /* Showcase layout: cards left on desktop, below image on mobile */
-    .showcase-container {}
-
     .showcase-image-wrapper {
       position: relative;
       width: 100%;
@@ -523,7 +520,7 @@
         var ogUrl = document.getElementById('og-url');
         if (ogUrl) ogUrl.setAttribute('content', canonical);
 
-        var absoluteImage = new URL('./app_screenshot_small.jpg', document.baseURI).href;
+        var absoluteImage = new URL('./share_image.jpg', document.baseURI).href;
         var ogImg = document.getElementById('og-image');
         if (ogImg) ogImg.setAttribute('content', absoluteImage);
         var twImg = document.getElementById('twitter-image');
@@ -567,7 +564,7 @@
         <div>
           <div class="kicker"><span class="pill">Find Hidden Reseller Deals</span></div>
           <h1>Stop Reading Between the Lines. We’ll Do It For You.</h1>
-          <p class="sub">SAM Tracker is the only AI tool specifically designed to find "wrapper contracts"—hidden
+          <p class="sub">SAM Tracker is the only AI tool specifically designed to find "wrapper contracts", hidden
             opportunities where the government is really looking for a savvy small business to act as a reseller or
             partner.</p>
 
@@ -629,7 +626,7 @@
           <div class="card glass">
             <h4 style="margin:0 0 6px;">2) AI Identifies Reseller Signals</h4>
             <p class="muted">Our purpose‑built AI reads every line, looking for the specific, nuanced signals of a
-              "wrapper contract"—named vendors, pass‑through language, and more.</p>
+              "wrapper contract", including named vendors, pass‑through language, and more.</p>
           </div>
           <div class="card glass">
             <h4 style="margin:0 0 6px;">3) Get Your Actionable Playbook</h4>
@@ -690,7 +687,7 @@
         <div class="card glass">
           <h3 style="margin:0 0 8px;">Your Unfair Advantage</h3>
           <p class="muted" style="margin:0;">SAM Tracker wasn’t built in a vacuum. It was built by a small business
-            actively fighting in the trenches of government contracting — because we needed an edge. We knew that while
+            actively fighting in the trenches of government contracting, because we needed an edge. We knew that while
             everyone else was reading the lines, the real opportunity was <strong>between</strong> the lines. This tool
             is
             the result. It’s a new class of analysis that turns publicly available data into a private, competitive
@@ -713,8 +710,9 @@
           </div>
           <div class="card glass">
             <h4 style="margin:0 0 6px;">Bid with a Decisive Advantage</h4>
-            <p class="muted">Walk into every bid knowing the game. Our analysis gives you the playbook — who to partner
-              with, what to ask for, and what compliance hurdles to watch out for — giving you a clear strategic edge.
+            <p class="muted">Walk into every bid knowing the game. Our analysis gives you the playbook with who to
+              partner
+              with, what to ask for, and what compliance hurdles to watch out for, giving you a clear strategic edge.
             </p>
           </div>
           <div class="card glass">
@@ -939,7 +937,7 @@
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error((data && data.error) || 'Failed to join waitlist');
-          $formBottom.outerHTML = '<div><div class="muted">Thanks — you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
+          $formBottom.outerHTML = '<div><div class="muted">Thanks, you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
           // Persist success locally so the state survives refresh
           try {
             localStorage.setItem('samtracker_waitlist', JSON.stringify({ email, ts: Date.now() }));
@@ -986,7 +984,7 @@
         }
         const formBottomEl = document.getElementById('waitlist-form-bottom');
         if (formBottomEl) {
-          formBottomEl.outerHTML = '<div><div class="muted">Thanks — you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
+          formBottomEl.outerHTML = '<div><div class="muted">Thanks; you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
         }
       }
     } catch (_) { }
