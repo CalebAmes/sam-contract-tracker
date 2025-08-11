@@ -11,6 +11,47 @@ import { createWriteStream } from "fs";
 import { AnalysisStatus } from "./database";
 import { GeminiAnalyzer, GeminiModel } from "./src/services/geminiAnalyzer";
 
+// Simple helper to hash IP-like strings without bringing crypto heavy deps
+function simpleHash(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const chr = input.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return `h${Math.abs(hash)}`;
+}
+
+export const addToWaitlist =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { email, samUrl, source } = req.body || {};
+      if (
+        !email ||
+        typeof email !== "string" ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      ) {
+        return res.status(400).json({ error: "Valid email is required" });
+      }
+      const userAgent = req.headers["user-agent"] || "";
+      const ip =
+        (req.headers["x-forwarded-for"] as string) ||
+        req.socket.remoteAddress ||
+        "";
+      const ipHash = ip
+        ? simpleHash(Array.isArray(ip) ? ip[0] : ip)
+        : undefined;
+      await db.addToWaitlist({ email, samUrl, source, userAgent, ipHash });
+      return res.json({ ok: true });
+    } catch (err: any) {
+      if (err?.message?.includes("UNIQUE constraint failed")) {
+        return res.json({ ok: true, duplicate: true });
+      }
+      console.error("Waitlist error:", err);
+      return res.status(500).json({ error: "Failed to join waitlist" });
+    }
+  };
+
 // Helper function to download attachments
 async function downloadAttachments(
   attachments: any[],
@@ -399,18 +440,22 @@ export const getContractNavigation =
 
       // Get all contract IDs in order
       const contractIds = await db.getContractIds();
-      
+
       // Find current contract index
-      const currentIndex = contractIds.findIndex(cid => cid === id);
-      
+      const currentIndex = contractIds.findIndex((cid) => cid === id);
+
       if (currentIndex === -1) {
         console.error(`404 - Contract not found in navigation: ${id}`);
         return res.status(404).json({ error: "Contract not found" });
       }
 
       // Calculate previous and next IDs
-      const previousId = currentIndex > 0 ? contractIds[currentIndex - 1] : null;
-      const nextId = currentIndex < contractIds.length - 1 ? contractIds[currentIndex + 1] : null;
+      const previousId =
+        currentIndex > 0 ? contractIds[currentIndex - 1] : null;
+      const nextId =
+        currentIndex < contractIds.length - 1
+          ? contractIds[currentIndex + 1]
+          : null;
 
       res.json({
         currentId: id,
@@ -1225,18 +1270,23 @@ export const analyzeContract =
               };
             } catch (geminiError) {
               // Log cleaner error message for Gemini API errors
-              if (axios.isAxiosError(geminiError) && geminiError.response?.data?.error) {
+              if (
+                axios.isAxiosError(geminiError) &&
+                geminiError.response?.data?.error
+              ) {
                 const apiError = geminiError.response.data.error;
                 console.error(
                   `Gemini API error for contract ${id}:`,
                   `\n  Status: ${geminiError.response.status}`,
                   `\n  Message: ${apiError.message || apiError}`,
-                  apiError.code ? `\n  Code: ${apiError.code}` : ''
+                  apiError.code ? `\n  Code: ${apiError.code}` : ""
                 );
               } else {
                 console.error(
                   `Gemini analysis failed for contract ${id}:`,
-                  geminiError instanceof Error ? geminiError.message : geminiError
+                  geminiError instanceof Error
+                    ? geminiError.message
+                    : geminiError
                 );
               }
               throw geminiError;
@@ -1364,12 +1414,14 @@ export const analyzeContract =
           console.log(`Analysis completed for contract ${id}`);
         } catch (error) {
           // Extract meaningful error information
-          let errorMessage = 'Unknown error';
-          let errorDetails = '';
-          
+          let errorMessage = "Unknown error";
+          let errorDetails = "";
+
           if (axios.isAxiosError(error)) {
-            errorMessage = `API Error: ${error.response?.status || 'Unknown status'}`;
-            
+            errorMessage = `API Error: ${
+              error.response?.status || "Unknown status"
+            }`;
+
             // Extract the actual error message from Gemini API response
             if (error.response?.data?.error) {
               const apiError = error.response.data.error;
@@ -1383,7 +1435,7 @@ export const analyzeContract =
             } else if (error.response?.statusText) {
               errorDetails = `\n  Status Text: ${error.response.statusText}`;
             }
-            
+
             // Add request details for debugging
             if (error.config?.url) {
               errorDetails += `\n  URL: ${error.config.url}`;
@@ -1391,12 +1443,17 @@ export const analyzeContract =
           } else if (error instanceof Error) {
             errorMessage = error.message;
             // Only include stack trace in development
-            if (process.env.NODE_ENV === 'development') {
-              errorDetails = `\n  Stack: ${error.stack?.split('\n').slice(0, 3).join('\n  ')}`;
+            if (process.env.NODE_ENV === "development") {
+              errorDetails = `\n  Stack: ${error.stack
+                ?.split("\n")
+                .slice(0, 3)
+                .join("\n  ")}`;
             }
           }
-          
-          console.error(`Error completing analysis for contract ${id}: ${errorMessage}${errorDetails}`);
+
+          console.error(
+            `Error completing analysis for contract ${id}: ${errorMessage}${errorDetails}`
+          );
           await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
 
           // Clean up uploaded files even on error

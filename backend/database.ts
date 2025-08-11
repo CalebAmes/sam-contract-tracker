@@ -1,54 +1,54 @@
-import sqlite3 from 'sqlite3';
-import { Database } from 'sqlite3';
-import path from 'path';
+import sqlite3 from "sqlite3";
+import { Database } from "sqlite3";
+import path from "path";
 
 // Backend types - duplicated for now to avoid shared dependency
 export enum ContractStatus {
-  NEW = 'new',
-  INTERESTED = 'interested',
-  PRE_BID = 'pre-bid',
-  SUBMITTED = 'submitted',
-  AWARDED = 'awarded',
-  LOST = 'lost',
-  DISCARDED = 'discarded',
-  CASE_STUDY = 'case-study'
+  NEW = "new",
+  INTERESTED = "interested",
+  PRE_BID = "pre-bid",
+  SUBMITTED = "submitted",
+  AWARDED = "awarded",
+  LOST = "lost",
+  DISCARDED = "discarded",
+  CASE_STUDY = "case-study",
 }
 
 export enum AnalysisStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  FAILED = 'failed'
+  PENDING = "pending",
+  IN_PROGRESS = "in_progress",
+  COMPLETED = "completed",
+  FAILED = "failed",
 }
 
 export enum NoteType {
-  GENERAL = 'general',
-  STRATEGY = 'strategy',
-  RESEARCH = 'research',
-  CONTACT = 'contact',
-  DECISION = 'decision',
-  FOLLOW_UP = 'follow_up'
+  GENERAL = "general",
+  STRATEGY = "strategy",
+  RESEARCH = "research",
+  CONTACT = "contact",
+  DECISION = "decision",
+  FOLLOW_UP = "follow_up",
 }
 
 export enum ContractPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical'
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  CRITICAL = "critical",
 }
 
 export enum ActivityType {
-  CONTRACT_CREATED = 'contract_created',
-  STATUS_CHANGED = 'status_changed',
-  PRIORITY_CHANGED = 'priority_changed',
-  FLAGS_UPDATED = 'flags_updated',
-  NOTE_ADDED = 'note_added',
-  NOTE_UPDATED = 'note_updated',
-  NOTE_DELETED = 'note_deleted',
-  CONTRACT_ARCHIVED = 'contract_archived',
-  CONTRACT_UNARCHIVED = 'contract_unarchived',
-  ANALYSIS_STARTED = 'analysis_started',
-  ANALYSIS_COMPLETED = 'analysis_completed'
+  CONTRACT_CREATED = "contract_created",
+  STATUS_CHANGED = "status_changed",
+  PRIORITY_CHANGED = "priority_changed",
+  FLAGS_UPDATED = "flags_updated",
+  NOTE_ADDED = "note_added",
+  NOTE_UPDATED = "note_updated",
+  NOTE_DELETED = "note_deleted",
+  CONTRACT_ARCHIVED = "contract_archived",
+  CONTRACT_UNARCHIVED = "contract_unarchived",
+  ANALYSIS_STARTED = "analysis_started",
+  ANALYSIS_COMPLETED = "analysis_completed",
 }
 
 export interface ContractNote {
@@ -130,7 +130,7 @@ export interface AIAnalysis {
   analyzedAt: string;
 }
 
-const DB_PATH = path.join(__dirname, 'contracts.db');
+const DB_PATH = path.join(__dirname, "contracts.db");
 
 class DatabaseService {
   private db: Database;
@@ -238,13 +238,16 @@ class DatabaseService {
       `);
 
       // Add aiModel column if it doesn't exist (migration)
-      this.db.run(`
+      this.db.run(
+        `
         ALTER TABLE ai_analysis ADD COLUMN ai_model TEXT DEFAULT '2.0-flash'
-      `, (err) => {
-        if (err && !err.message.includes('duplicate column name')) {
-          console.error('Error adding ai_model column:', err);
+      `,
+        (err) => {
+          if (err && !err.message.includes("duplicate column name")) {
+            console.error("Error adding ai_model column:", err);
+          }
         }
-      });
+      );
 
       // Search history table
       this.db.run(`
@@ -267,6 +270,19 @@ class DatabaseService {
           metadata TEXT,
           created_at TEXT NOT NULL,
           FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
+        )
+      `);
+
+      // Waitlist table (for marketing)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS waitlist (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT NOT NULL UNIQUE,
+          sam_url TEXT,
+          source TEXT,
+          user_agent TEXT,
+          ip_hash TEXT,
+          created_at TEXT NOT NULL
         )
       `);
     });
@@ -301,7 +317,7 @@ class DatabaseService {
           contract.lastViewedAt || null,
           contract.viewCount || 0,
           contract.analysisStatus || AnalysisStatus.PENDING,
-          contract.flags ? JSON.stringify(contract.flags) : '[]',
+          contract.flags ? JSON.stringify(contract.flags) : "[]",
           contract.priority || ContractPriority.MEDIUM,
           contract.isArchived ? 1 : 0,
           contract.archivedAt || null,
@@ -314,7 +330,9 @@ class DatabaseService {
           } else {
             // Log contract creation activity
             await this.logActivity({
-              id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `activity-${Date.now()}-${Math.random()
+                .toString(36)
+                .substr(2, 9)}`,
               contractId: contract.id,
               contractTitle: contract.title,
               activityType: ActivityType.CONTRACT_CREATED,
@@ -322,9 +340,9 @@ class DatabaseService {
               metadata: {
                 fetchMethod: contract.fetchMethod,
                 apiSource: contract.apiSource,
-                organizationId: contract.organizationId
+                organizationId: contract.organizationId,
               },
-              createdAt: new Date().toISOString()
+              createdAt: new Date().toISOString(),
             });
             resolve();
           }
@@ -333,7 +351,10 @@ class DatabaseService {
     });
   }
 
-  async saveAttachment(attachment: Attachment, contractId: string): Promise<void> {
+  async saveAttachment(
+    attachment: Attachment,
+    contractId: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT OR REPLACE INTO attachments 
@@ -361,7 +382,10 @@ class DatabaseService {
     });
   }
 
-  async saveAIAnalysis(analysis: AIAnalysis, contractId: string): Promise<void> {
+  async saveAIAnalysis(
+    analysis: AIAnalysis,
+    contractId: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT OR REPLACE INTO ai_analysis 
@@ -401,7 +425,7 @@ class DatabaseService {
               const attachments = await this.getAttachments(row.id);
               const aiAnalysis = await this.getAIAnalysis(row.id);
               const internalNotes = await this.getContractNotes(row.id);
-              
+
               contracts.push({
                 id: row.id,
                 title: row.title,
@@ -454,7 +478,7 @@ class DatabaseService {
             const attachments = await this.getAttachments(row.id);
             const aiAnalysis = await this.getAIAnalysis(row.id);
             const internalNotes = await this.getContractNotes(row.id);
-            
+
             resolve({
               id: row.id,
               title: row.title,
@@ -500,7 +524,7 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            const attachments: Attachment[] = rows.map(row => ({
+            const attachments: Attachment[] = rows.map((row) => ({
               id: row.id,
               name: row.name,
               url: row.url,
@@ -517,48 +541,52 @@ class DatabaseService {
     });
   }
 
-  async getAIAnalysis(contractId: string, version?: number): Promise<AIAnalysis | undefined> {
+  async getAIAnalysis(
+    contractId: string,
+    version?: number
+  ): Promise<AIAnalysis | undefined> {
     return new Promise((resolve, reject) => {
-      const query = version 
+      const query = version
         ? `SELECT * FROM ai_analysis WHERE contract_id = ? AND type = 'analysis' AND version = ?`
         : `SELECT * FROM ai_analysis WHERE contract_id = ? AND type = 'analysis' AND is_current = 1`;
       const params = version ? [contractId, version] : [contractId];
-      
-      this.db.get(
-        query,
-        params,
-        (err, row: any) => {
-          if (err) {
-            reject(err);
-          } else if (!row) {
-            resolve(undefined);
-          } else {
-            // The indicators field contains the full analysis JSON
-            try {
-              const fullAnalysis = JSON.parse(row.indicators);
-              // Add version and document info to the analysis
-              fullAnalysis.version = row.version;
-              fullAnalysis.documentsAnalyzed = row.documents_analyzed ? JSON.parse(row.documents_analyzed) : [];
-              fullAnalysis.aiModel = row.ai_model || '2.0-flash';
-              resolve(fullAnalysis);
-            } catch (parseError) {
-              // Fallback to old format if parsing fails
-              resolve({
-                wrapperScore: row.wrapper_score,
-                indicators: [],
-                summary: row.summary,
-                recommendation: row.recommendation,
-                analyzedAt: row.analyzed_at,
-                aiModel: row.ai_model || '2.0-flash',
-              } as any);
-            }
+
+      this.db.get(query, params, (err, row: any) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(undefined);
+        } else {
+          // The indicators field contains the full analysis JSON
+          try {
+            const fullAnalysis = JSON.parse(row.indicators);
+            // Add version and document info to the analysis
+            fullAnalysis.version = row.version;
+            fullAnalysis.documentsAnalyzed = row.documents_analyzed
+              ? JSON.parse(row.documents_analyzed)
+              : [];
+            fullAnalysis.aiModel = row.ai_model || "2.0-flash";
+            resolve(fullAnalysis);
+          } catch (parseError) {
+            // Fallback to old format if parsing fails
+            resolve({
+              wrapperScore: row.wrapper_score,
+              indicators: [],
+              summary: row.summary,
+              recommendation: row.recommendation,
+              analyzedAt: row.analyzed_at,
+              aiModel: row.ai_model || "2.0-flash",
+            } as any);
           }
         }
-      );
+      });
     });
   }
 
-  async updateContractStatus(id: string, status: ContractStatus): Promise<void> {
+  async updateContractStatus(
+    id: string,
+    status: ContractStatus
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE contracts SET status = ?, updated_at = ? WHERE id = ?`,
@@ -571,13 +599,15 @@ class DatabaseService {
             const contract = await this.getContract(id);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: id,
                 contractTitle: contract.title,
                 activityType: ActivityType.STATUS_CHANGED,
                 description: `Status changed to "${status}"`,
                 metadata: { newStatus: status },
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -587,7 +617,10 @@ class DatabaseService {
     });
   }
 
-  async updateAnalysisStatus(id: string, analysisStatus: AnalysisStatus): Promise<void> {
+  async updateAnalysisStatus(
+    id: string,
+    analysisStatus: AnalysisStatus
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE contracts SET analysis_status = ?, updated_at = ? WHERE id = ?`,
@@ -621,21 +654,20 @@ class DatabaseService {
 
   async deleteContract(id: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.db.run(
-        `DELETE FROM contracts WHERE id = ?`,
-        [id],
-        function (err) {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+      this.db.run(`DELETE FROM contracts WHERE id = ?`, [id], function (err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
         }
-      );
+      });
     });
   }
 
-  async saveSearchHistory(searchUrl: string, totalFound: number): Promise<void> {
+  async saveSearchHistory(
+    searchUrl: string,
+    totalFound: number
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `INSERT INTO search_history (search_url, total_found, scraped_at)
@@ -662,7 +694,7 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            const notes: ContractNote[] = rows.map(row => ({
+            const notes: ContractNote[] = rows.map((row) => ({
               id: row.id,
               contractId: row.contract_id,
               content: row.content,
@@ -682,7 +714,14 @@ class DatabaseService {
       this.db.run(
         `INSERT INTO contract_notes (id, contract_id, content, type, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [note.id, note.contractId, note.content, note.type, note.createdAt, note.updatedAt],
+        [
+          note.id,
+          note.contractId,
+          note.content,
+          note.type,
+          note.createdAt,
+          note.updatedAt,
+        ],
         async (err) => {
           if (err) {
             reject(err);
@@ -691,13 +730,15 @@ class DatabaseService {
             const contract = await this.getContract(note.contractId);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: note.contractId,
                 contractTitle: contract.title,
                 activityType: ActivityType.NOTE_ADDED,
                 description: `Added ${note.type} note`,
                 metadata: { noteType: note.type },
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -717,19 +758,21 @@ class DatabaseService {
             reject(err);
           } else {
             // Get note details for logging
-            const notes = await this.getContractNotes('');
-            const note = notes.find(n => n.id === noteId);
+            const notes = await this.getContractNotes("");
+            const note = notes.find((n) => n.id === noteId);
             if (note) {
               const contract = await this.getContract(note.contractId);
               if (contract) {
                 await this.logActivity({
-                  id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  id: `activity-${Date.now()}-${Math.random()
+                    .toString(36)
+                    .substr(2, 9)}`,
                   contractId: note.contractId,
                   contractTitle: contract.title,
                   activityType: ActivityType.NOTE_UPDATED,
                   description: `Updated ${note.type} note`,
                   metadata: { noteType: note.type },
-                  createdAt: new Date().toISOString()
+                  createdAt: new Date().toISOString(),
                 });
               }
             }
@@ -751,7 +794,7 @@ class DatabaseService {
             reject(err);
             return;
           }
-          
+
           this.db.run(
             `DELETE FROM contract_notes WHERE id = ?`,
             [noteId],
@@ -764,13 +807,15 @@ class DatabaseService {
                   const contract = await this.getContract(row.contract_id);
                   if (contract) {
                     await this.logActivity({
-                      id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      id: `activity-${Date.now()}-${Math.random()
+                        .toString(36)
+                        .substr(2, 9)}`,
                       contractId: row.contract_id,
                       contractTitle: contract.title,
                       activityType: ActivityType.NOTE_DELETED,
                       description: `Deleted ${row.type} note`,
                       metadata: { noteType: row.type },
-                      createdAt: new Date().toISOString()
+                      createdAt: new Date().toISOString(),
                     });
                   }
                 }
@@ -784,7 +829,10 @@ class DatabaseService {
   }
 
   // Flags management
-  async updateContractFlags(contractId: string, flags: string[]): Promise<void> {
+  async updateContractFlags(
+    contractId: string,
+    flags: string[]
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE contracts SET flags = ?, updated_at = ? WHERE id = ?`,
@@ -797,13 +845,15 @@ class DatabaseService {
             const contract = await this.getContract(contractId);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: contractId,
                 contractTitle: contract.title,
                 activityType: ActivityType.FLAGS_UPDATED,
                 description: `Contract flags updated (${flags.length} flags)`,
                 metadata: { flags },
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -814,7 +864,10 @@ class DatabaseService {
   }
 
   // Priority management
-  async updateContractPriority(contractId: string, priority: ContractPriority): Promise<void> {
+  async updateContractPriority(
+    contractId: string,
+    priority: ContractPriority
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE contracts SET priority = ?, updated_at = ? WHERE id = ?`,
@@ -827,13 +880,15 @@ class DatabaseService {
             const contract = await this.getContract(contractId);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: contractId,
                 contractTitle: contract.title,
                 activityType: ActivityType.PRIORITY_CHANGED,
                 description: `Priority changed to "${priority}"`,
                 metadata: { newPriority: priority },
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -857,13 +912,15 @@ class DatabaseService {
             const contract = await this.getContract(contractId);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: contractId,
                 contractTitle: contract.title,
                 activityType: ActivityType.CONTRACT_ARCHIVED,
                 description: `Contract archived`,
                 metadata: {},
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -886,13 +943,15 @@ class DatabaseService {
             const contract = await this.getContract(contractId);
             if (contract) {
               await this.logActivity({
-                id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `activity-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .substr(2, 9)}`,
                 contractId: contractId,
                 contractTitle: contract.title,
                 activityType: ActivityType.CONTRACT_UNARCHIVED,
                 description: `Contract unarchived`,
                 metadata: {},
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
               });
             }
             resolve();
@@ -925,7 +984,7 @@ class DatabaseService {
             reject(err);
           } else {
             const baseMetrics = rows[0];
-            
+
             // Get status breakdown
             this.db.all(
               `SELECT status, COUNT(*) as count FROM contracts WHERE is_archived = 0 GROUP BY status`,
@@ -935,7 +994,7 @@ class DatabaseService {
                   reject(err);
                 } else {
                   const byStatus: Record<string, number> = {};
-                  statusRows.forEach(row => {
+                  statusRows.forEach((row) => {
                     byStatus[row.status] = row.count;
                   });
 
@@ -948,7 +1007,7 @@ class DatabaseService {
                         reject(err);
                       } else {
                         const byPriority: Record<string, number> = {};
-                        priorityRows.forEach(row => {
+                        priorityRows.forEach((row) => {
                           byPriority[row.priority] = row.count;
                         });
 
@@ -985,7 +1044,7 @@ class DatabaseService {
           activity.activityType,
           activity.description,
           activity.metadata ? JSON.stringify(activity.metadata) : null,
-          activity.createdAt
+          activity.createdAt,
         ],
         function (err) {
           if (err) {
@@ -1007,14 +1066,14 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            const activities: ActivityLog[] = rows.map(row => ({
+            const activities: ActivityLog[] = rows.map((row) => ({
               id: row.id,
               contractId: row.contract_id,
               contractTitle: row.contract_title,
               activityType: row.activity_type as ActivityType,
               description: row.description,
               metadata: row.metadata ? JSON.parse(row.metadata) : null,
-              createdAt: row.created_at
+              createdAt: row.created_at,
             }));
             resolve(activities);
           }
@@ -1023,7 +1082,41 @@ class DatabaseService {
     });
   }
 
-  async updateContractAnalysisStatus(contractId: string, analysisStatus: AnalysisStatus): Promise<void> {
+  // Waitlist methods
+  async addToWaitlist(params: {
+    email: string;
+    samUrl?: string;
+    source?: string;
+    userAgent?: string;
+    ipHash?: string;
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT OR IGNORE INTO waitlist (email, sam_url, source, user_agent, ip_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          params.email.trim().toLowerCase(),
+          params.samUrl || null,
+          params.source || null,
+          params.userAgent || null,
+          params.ipHash || null,
+          new Date().toISOString(),
+        ],
+        function (err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async updateContractAnalysisStatus(
+    contractId: string,
+    analysisStatus: AnalysisStatus
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE contracts SET analysis_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
@@ -1039,14 +1132,18 @@ class DatabaseService {
     });
   }
 
-  async updateAnalysisProgress(contractId: string, progress: number, message: string): Promise<void> {
+  async updateAnalysisProgress(
+    contractId: string,
+    progress: number,
+    message: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const progressData = {
         progress,
         message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       this.db.run(
         `INSERT OR REPLACE INTO ai_analysis (id, contract_id, type, indicators, created_at, updated_at) 
          VALUES (?, ?, 'progress', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
@@ -1062,7 +1159,9 @@ class DatabaseService {
     });
   }
 
-  async getAnalysisProgress(contractId: string): Promise<{ progress: number; message: string } | null> {
+  async getAnalysisProgress(
+    contractId: string
+  ): Promise<{ progress: number; message: string } | null> {
     return new Promise((resolve, reject) => {
       this.db.get(
         'SELECT indicators FROM ai_analysis WHERE contract_id = ? AND type = "progress"',
@@ -1084,7 +1183,14 @@ class DatabaseService {
     });
   }
 
-  async getAnalysisHistory(contractId: string): Promise<Array<{ version: number; analyzedAt: string; documentCount: number; wrapperScore?: number }>> {
+  async getAnalysisHistory(contractId: string): Promise<
+    Array<{
+      version: number;
+      analyzedAt: string;
+      documentCount: number;
+      wrapperScore?: number;
+    }>
+  > {
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT version, analyzed_at, documents_analyzed, wrapper_score 
@@ -1096,13 +1202,13 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            const history = rows.map(row => ({
+            const history = rows.map((row) => ({
               version: row.version,
               analyzedAt: row.analyzed_at,
-              documentCount: row.documents_analyzed 
-                ? JSON.parse(row.documents_analyzed).length 
+              documentCount: row.documents_analyzed
+                ? JSON.parse(row.documents_analyzed).length
                 : 0,
-              wrapperScore: row.wrapper_score
+              wrapperScore: row.wrapper_score,
             }));
             resolve(history);
           }
@@ -1112,7 +1218,10 @@ class DatabaseService {
   }
 
   // Analysis Notes methods
-  async getAnalysisNotes(contractId: string, version: number): Promise<AnalysisNote[]> {
+  async getAnalysisNotes(
+    contractId: string,
+    version: number
+  ): Promise<AnalysisNote[]> {
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM analysis_notes WHERE contract_id = ? AND analysis_version = ? ORDER BY created_at DESC`,
@@ -1121,14 +1230,14 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            const notes: AnalysisNote[] = rows.map(row => ({
+            const notes: AnalysisNote[] = rows.map((row) => ({
               id: row.id,
               contractId: row.contract_id,
               analysisVersion: row.analysis_version,
               content: row.content,
               type: row.type as NoteType,
               createdAt: row.created_at,
-              updatedAt: row.updated_at
+              updatedAt: row.updated_at,
             }));
             resolve(notes);
           }
@@ -1142,7 +1251,15 @@ class DatabaseService {
       this.db.run(
         `INSERT INTO analysis_notes (id, contract_id, analysis_version, content, type, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [note.id, note.contractId, note.analysisVersion, note.content, note.type, note.createdAt, note.updatedAt],
+        [
+          note.id,
+          note.contractId,
+          note.analysisVersion,
+          note.content,
+          note.type,
+          note.createdAt,
+          note.updatedAt,
+        ],
         (err) => {
           if (err) {
             reject(err);
@@ -1186,7 +1303,11 @@ class DatabaseService {
     });
   }
 
-  async updateContractAnalysis(contractId: string, analysis: any, documentsAnalyzed?: any[]): Promise<void> {
+  async updateContractAnalysis(
+    contractId: string,
+    analysis: any,
+    documentsAnalyzed?: any[]
+  ): Promise<void> {
     return new Promise(async (resolve, reject) => {
       // First get the latest version number
       this.db.get(
@@ -1197,10 +1318,10 @@ class DatabaseService {
             reject(err);
             return;
           }
-          
+
           const newVersion = (row?.maxVersion || 0) + 1;
           const wrapperScore = analysis.wrapperScore || 0;
-          
+
           // Mark all previous analyses as not current
           this.db.run(
             `UPDATE ai_analysis SET is_current = 0 WHERE contract_id = ? AND type = 'analysis'`,
@@ -1210,7 +1331,7 @@ class DatabaseService {
                 reject(err);
                 return;
               }
-              
+
               // Update the ai_score in contracts table
               this.db.run(
                 `UPDATE contracts SET ai_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
@@ -1220,7 +1341,7 @@ class DatabaseService {
                     reject(err);
                     return;
                   }
-                  
+
                   // Insert new analysis version
                   this.db.run(
                     `INSERT INTO ai_analysis 
@@ -1232,11 +1353,13 @@ class DatabaseService {
                       newVersion,
                       wrapperScore,
                       JSON.stringify(analysis),
-                      analysis.summary || '',
-                      analysis.recommendedAction || '',
-                      documentsAnalyzed ? JSON.stringify(documentsAnalyzed) : null,
-                      analysis.aiModel || '2.0-flash',
-                      analysis.analyzedAt || new Date().toISOString()
+                      analysis.summary || "",
+                      analysis.recommendedAction || "",
+                      documentsAnalyzed
+                        ? JSON.stringify(documentsAnalyzed)
+                        : null,
+                      analysis.aiModel || "2.0-flash",
+                      analysis.analyzedAt || new Date().toISOString(),
                     ],
                     async (err) => {
                       if (err) {
@@ -1244,18 +1367,20 @@ class DatabaseService {
                       } else {
                         // Log analysis completion
                         await this.logActivity({
-                          id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                          id: `activity-${Date.now()}-${Math.random()
+                            .toString(36)
+                            .substr(2, 9)}`,
                           contractId: contractId,
-                          contractTitle: '',
+                          contractTitle: "",
                           activityType: ActivityType.ANALYSIS_COMPLETED,
                           description: `Contract analysis completed with wrapper score: ${wrapperScore}% (Version ${newVersion})`,
                           metadata: {
                             wrapperScore: wrapperScore,
                             contractType: analysis.contractType,
                             version: newVersion,
-                            documentCount: documentsAnalyzed?.length || 0
+                            documentCount: documentsAnalyzed?.length || 0,
                           },
-                          createdAt: new Date().toISOString()
+                          createdAt: new Date().toISOString(),
                         });
                         resolve();
                       }
@@ -1296,26 +1421,26 @@ class DatabaseService {
         WHERE (title LIKE ? OR description LIKE ? OR solicitation_number LIKE ?)
       `;
       let params: any[] = [`%${query}%`, `%${query}%`, `%${query}%`];
-      
+
       // Add filters
       if (filters.status) {
         sql += ` AND status = ?`;
         params.push(filters.status);
       }
-      
+
       if (filters.isArchived !== undefined) {
         sql += ` AND is_archived = ?`;
         params.push(filters.isArchived ? 1 : 0);
       }
-      
+
       if (filters.priority) {
         sql += ` AND priority = ?`;
         params.push(filters.priority);
       }
-      
+
       sql += ` ORDER BY created_at DESC LIMIT ?`;
       params.push(filters.limit || 100);
-      
+
       this.db.all(sql, params, async (err, rows: any[]) => {
         if (err) {
           reject(err);
@@ -1324,7 +1449,7 @@ class DatabaseService {
           for (const row of rows) {
             const attachments = await this.getAttachments(row.id);
             const aiAnalysis = await this.getAIAnalysis(row.id);
-            
+
             contracts.push({
               id: row.id,
               title: row.title,
@@ -1362,9 +1487,11 @@ class DatabaseService {
   }
 
   // Check if contracts exist in database
-  async contractsExist(contractIds: string[]): Promise<{ [key: string]: boolean }> {
+  async contractsExist(
+    contractIds: string[]
+  ): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve, reject) => {
-      const placeholders = contractIds.map(() => '?').join(',');
+      const placeholders = contractIds.map(() => "?").join(",");
       this.db.all(
         `SELECT id FROM contracts WHERE id IN (${placeholders})`,
         contractIds,
@@ -1374,11 +1501,11 @@ class DatabaseService {
           } else {
             const existingIds = new Set(rows.map((row: any) => row.id));
             const results: { [key: string]: boolean } = {};
-            
-            contractIds.forEach(id => {
+
+            contractIds.forEach((id) => {
               results[id] = existingIds.has(id);
             });
-            
+
             resolve(results);
           }
         }
@@ -1395,7 +1522,7 @@ class DatabaseService {
           if (err) {
             reject(err);
           } else {
-            resolve(rows.map(row => row.id));
+            resolve(rows.map((row) => row.id));
           }
         }
       );

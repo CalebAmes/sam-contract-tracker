@@ -19,13 +19,13 @@ function Navigation() {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // Load collapsed state from localStorage
-    const saved = localStorage.getItem('navCollapsed');
-    return saved === 'true';
+    const saved = localStorage.getItem("navCollapsed");
+    return saved === "true";
   });
 
   useEffect(() => {
     // Save collapsed state to localStorage
-    localStorage.setItem('navCollapsed', isCollapsed.toString());
+    localStorage.setItem("navCollapsed", isCollapsed.toString());
   }, [isCollapsed]);
 
   const isActive = (path: string) => location.pathname === path;
@@ -33,13 +33,19 @@ function Navigation() {
   const toggleNav = () => setIsCollapsed(!isCollapsed);
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-card border-r border-border flex flex-col transition-all duration-300`}>
+    <aside
+      className={`${
+        isCollapsed ? "w-16" : "w-64"
+      } bg-card border-r border-border flex flex-col transition-all duration-300`}
+    >
       <div className="flex items-center justify-between p-4">
-        <h2 className={`font-bold text-lg ${isCollapsed ? 'hidden' : 'block'}`}>Navigation</h2>
+        <h2 className={`font-bold text-lg ${isCollapsed ? "hidden" : "block"}`}>
+          Navigation
+        </h2>
         <button
           onClick={toggleNav}
           className="p-1 rounded-lg hover:bg-muted transition-colors"
-          aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -47,7 +53,9 @@ function Navigation() {
       <nav className="flex-1 px-4 py-2 space-y-2">
         <Link
           to="/"
-          className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-left transition-colors ${
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center" : "gap-3"
+          } px-3 py-2 rounded-lg text-left transition-colors ${
             isActive("/")
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:bg-muted"
@@ -60,8 +68,11 @@ function Navigation() {
 
         <Link
           to="/contracts"
-          className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-left transition-colors ${
-            isActive("/contracts") || location.pathname.startsWith("/contracts/")
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center" : "gap-3"
+          } px-3 py-2 rounded-lg text-left transition-colors ${
+            isActive("/contracts") ||
+            location.pathname.startsWith("/contracts/")
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:bg-muted"
           }`}
@@ -73,7 +84,9 @@ function Navigation() {
 
         <Link
           to="/analyze"
-          className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-left transition-colors ${
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center" : "gap-3"
+          } px-3 py-2 rounded-lg text-left transition-colors ${
             isActive("/analyze")
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:bg-muted"
@@ -81,12 +94,16 @@ function Navigation() {
           title={isCollapsed ? "Analyze Contract" : undefined}
         >
           <Brain className="w-4 h-4 flex-shrink-0" />
-          {!isCollapsed && <span className="font-medium">Analyze Contract</span>}
+          {!isCollapsed && (
+            <span className="font-medium">Analyze Contract</span>
+          )}
         </Link>
 
         <Link
           to="/search"
-          className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-left transition-colors ${
+          className={`w-full flex items-center ${
+            isCollapsed ? "justify-center" : "gap-3"
+          } px-3 py-2 rounded-lg text-left transition-colors ${
             isActive("/search")
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:bg-muted"
@@ -94,9 +111,10 @@ function Navigation() {
           title={isCollapsed ? "Search SAM.gov" : undefined}
         >
           <Search className="w-4 h-4 flex-shrink-0" />
-          {!isCollapsed && <span className="font-medium">Search SAM.gov (wip)</span>}
+          {!isCollapsed && (
+            <span className="font-medium">Search SAM.gov (wip)</span>
+          )}
         </Link>
-
       </nav>
 
       {!isCollapsed && (

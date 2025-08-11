@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAM Tracker - Find Hidden Reseller Deals on SAM.gov</title>
+  <meta name="description"
+    content="AI that detects 'wrapper contracts' on SAM.gov — hidden reseller opportunities with named vendors and pass‑through language. Join the waitlist for early access." />
+  <meta property="og:title" content="SAM Tracker — Hidden Reseller Opportunity Detector for SAM.gov" />
+  <meta property="og:description"
+    content="Paste any SAM.gov link. Our AI finds wrapper contracts, quantifies likelihood, and gives you a reseller playbook." />
+  <meta property="og:type" content="website" />
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Favicons -->
+  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="16x16" />
+  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="48x48" />
+  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="./logo_transparent.png" sizes="180x180" />
+  <link rel="shortcut icon" href="./logo_transparent.png" type="image/png" />
+  <style>
+    :root {
+      --bg: #0b0b0c;
+      --card: #111113;
+      --muted: #8b8d92;
+      --text: #fafafa;
+      --accent: #6366f1;
+      --accent-2: #4f46e5;
+      --border: #222227;
+      --error: #ef4444;
+      /* Brand palette for page gradient */
+      --blue-900: #070a14;
+      --blue-800: #0b1226;
+      --blue-700: #0f1a33;
+      --red-500: rgba(196, 42, 42, 0.20);
+      --white-glow: rgba(255, 255, 255, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      /* Full‑page radial + linear gradient (deep blues base, subtle red/white accents) */
+      background:
+        radial-gradient(1200px 700px at 20% -10%, var(--blue-700), transparent 70%),
+        radial-gradient(1000px 600px at 85% 0%, var(--white-glow), transparent 75%),
+        radial-gradient(900px 600px at 80% 5%, var(--red-500), transparent 70%),
+        linear-gradient(180deg, var(--blue-900) 0%, var(--blue-800) 55%, var(--blue-900) 100%);
+      background-color: var(--blue-900);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding-left: calc(clamp(22px, 6vw, 40px) + env(safe-area-inset-left, 0px));
+      padding-right: calc(clamp(22px, 6vw, 40px) + env(safe-area-inset-right, 0px));
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero-gradient {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(1200px 700px at 15% -20%, rgba(79, 70, 229, 0.35), transparent 70%),
+        radial-gradient(900px 500px at 90% 10%, rgba(255, 255, 255, 0.06), transparent 75%),
+        radial-gradient(800px 480px at 85% 0%, rgba(196, 42, 42, 0.20), transparent 70%);
+      pointer-events: none;
+      filter: blur(6px);
+      z-index: 0;
+    }
+
+    .hero-shadow {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(800px 260px at 20% 15%, rgba(0, 0, 0, .45), transparent 60%);
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      padding: 88px 0 24px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    @media (min-width: 1200px) {
+      .hero-inner {
+        grid-template-columns: 1.1fr 0.9fr;
+        align-items: center;
+        padding: 104px 0 40px;
+      }
+    }
+
+    h1 {
+      font-size: 36px;
+      line-height: 1.1;
+      margin: 0 0 12px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    @media (min-width: 900px) {
+      h1 {
+        font-size: 52px;
+      }
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 18px;
+      margin: 0 0 20px;
+    }
+
+    /* Conversion-oriented helpers */
+    .kicker {
+      margin-bottom: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #dfe2ff;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .02em;
+    }
+
+    .glass {
+      background: rgba(14, 18, 28, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+    }
+
+    /* Glass header */
+    .header-glass {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(14, 18, 28, 0.38);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn {
+      transition: transform .02s ease, background .2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .trust-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Decorative grid overlay */
+    .hero .gridlines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 24px),
+        repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 24px);
+      mask-image: radial-gradient(ellipse at 50% -10%, rgba(0, 0, 0, 0.9), transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at 50% -10%, rgba(0, 0, 0, 0.9), transparent 70%);
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+    }
+
+    /* Ensure glass wins when used with card */
+    .card.glass {
+      background: rgba(14, 18, 28, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+    }
+
+    .inline-form {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .inline-form {
+        grid-template-columns: 1fr auto;
+      }
+    }
+
+    input[type="email"],
+    input[type="url"],
+    .btn {
+      height: 48px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 0 14px;
+      font-size: 16px;
+      background: #0f0f12;
+      color: var(--text);
+    }
+
+    input::placeholder {
+      color: #6b6e76;
+    }
+
+    .btn {
+      background: var(--accent);
+      border: none;
+      padding: 0 18px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background: var(--accent-2);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    .error {
+      color: var(--error);
+      font-size: 14px;
+      margin-top: 8px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 900px) {
+      .grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .footer {
+      padding: 32px 0 56px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .list {
+      font-size: 14px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    .list ul {
+      margin: 10px 0 0 18px;
+      padding: 0;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* Section vertical rhythm */
+    .section-pad {
+      padding-top: 44px;
+      padding-bottom: 20px;
+    }
+
+    .section-pad-sm {
+      padding-top: 26px;
+      padding-bottom: 14px;
+    }
+
+    .section-pad-lg {
+      padding-top: 56px;
+      padding-bottom: 28px;
+    }
+
+    /* Responsive adjustments */
+    .showcase-section {
+      position: relative;
+    }
+
+    .showcase-headline {
+      text-align: center;
+      margin: 0 0 8px;
+    }
+
+    .showcase-subheadline {
+      text-align: center;
+      color: var(--muted);
+      margin: 0 auto 12px;
+      max-width: 900px;
+    }
+
+    .analysis-screenshot {
+      width: 100%;
+      display: block;
+      margin: 0;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    /* Showcase layout: cards left on desktop, below image on mobile */
+    .showcase-container {}
+
+    .showcase-image-wrapper {
+      position: relative;
+      width: 100%;
+      margin: 20px 0 0;
+    }
+
+    .explainer-cards-wrapper {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
+      grid-template-columns: 1fr;
+    }
+
+    .explainer-card {
+      background: rgba(14, 18, 28, 0.45);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      margin-bottom: 12px;
+    }
+
+    .explainer-card h4 {
+      margin: 0 0 6px;
+    }
+
+    .explainer-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    @media (min-width: 1024px) {
+      .explainer-cards-wrapper {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+
+    @media (max-width: 900px) {
+      .hero-inner {
+        padding: 72px 0 20px;
+      }
+    }
+
+    @media (max-width: 1199px) {
+      .container {
+        padding-left: calc(clamp(26px, 8vw, 60px) + env(safe-area-inset-left, 0px));
+        padding-right: calc(clamp(26px, 8vw, 60px) + env(safe-area-inset-right, 0px));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .container {
+        padding-left: calc(clamp(22px, 7.5vw, 48px) + env(safe-area-inset-left, 0px));
+        padding-right: calc(clamp(22px, 7.5vw, 48px) + env(safe-area-inset-right, 0px));
+      }
+
+      .section-pad {
+        padding-top: 30px;
+        padding-bottom: 16px;
+      }
+
+      .section-pad-sm {
+        padding-top: 18px;
+        padding-bottom: 12px;
+      }
+
+      .section-pad-lg {
+        padding-top: 40px;
+        padding-bottom: 22px;
+      }
+
+      h1 {
+        font-size: 32px;
+      }
+
+      .sub {
+        font-size: 16px;
+      }
+
+      .inline-form .btn {
+        width: 100%;
+      }
+
+      .grid.grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (min-width: 700px) and (max-width: 1023px) {
+      .grid.grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .grid.grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .hero-inner {
+        min-height: 65vh;
+      }
+    }
+
+    /* Motion accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      .btn {
+        transition: none;
+      }
+
+      .hero-gradient {
+        filter: none;
+      }
+    }
+  </style>
+  <script src="./config.js"></script>
+</head>
+
+<body>
+  <header class="header-glass">
+    <div class="container" style="padding-block:12px; display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="./logo_transparent.png" alt="SAM Tracker" width="56" height="56"
+          style="display:block; border-radius:6px;" />
+        <strong>SAM Tracker</strong>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <a id="header-join" href="#join" class="btn btn-outline"
+          style="height:36px; padding:0 12px; border-radius:10px; font-size:14px;">Join Waitlist</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-gradient"></div>
+      <div class="container hero-inner section-pad-lg">
+        <div>
+          <div class="kicker"><span class="pill">Find Hidden Reseller Deals</span></div>
+          <h1>Stop Reading Between the Lines. We’ll Do It For You.</h1>
+          <p class="sub">SAM Tracker is the only AI tool specifically designed to find "wrapper contracts"—hidden
+            opportunities where the government is really looking for a savvy small business to act as a reseller or
+            partner.</p>
+
+          <!-- Before / After visual -->
+          <div class="card glass" style="margin-top:14px;">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
+              <div class="card" style="background:rgba(0,0,0,0.25);">
+                <div class="muted" style="font-weight:600; margin-bottom:6px;">Before</div>
+                <div class="list">A 40‑Page "Software" RFQ • Mentions Dell 17 times • Seems impossible…</div>
+              </div>
+              <div class="card" style="background:rgba(79,70,229,0.12); border-color: rgba(99,102,241,0.35);">
+                <div class="muted" style="font-weight:600; margin-bottom:6px; color:#dfe2ff;">After (30s)</div>
+                <div class="list">95% Wrapper Contract Likelihood • Clear Reseller Signals • A Step‑by‑Step Sales
+                  Playbook
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div id="primary-cta" class="card glass" style="scroll-margin-top:80px;">
+            <h3 style="margin:0 0 6px;">Get early access</h3>
+            <p class="muted" style="margin:0 0 12px;">Join the waitlist. We’ll send early access and updates.</p>
+            <form id="waitlist-form" class="grid" style="grid-template-columns: 1fr; gap:10px;" action="#join">
+              <input id="email" type="email" required placeholder="Work email" aria-label="Email" />
+              <button class="btn" type="submit" id="join-btn">Join Waitlist & Get Early Access</button>
+            </form>
+            <div id="form-error" class="error" style="display:none;"></div>
+            <div class="trust-row">
+              <span style="opacity:.8;">No credit card</span>
+              <span style="opacity:.35;">•</span>
+              <span style="opacity:.8;">No spam</span>
+              <span style="opacity:.35;">•</span>
+              <span style="opacity:.8;">Privacy‑friendly analytics</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section>
+      <div class="container section-pad">
+        <h3 style="margin:0 0 14px;">How it works</h3>
+        <div class="grid grid-3">
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">1) Paste Any SAM.gov Link</h4>
+            <p class="muted">Just drop in the opportunity URL. Our system fetches
+              the
+              notice and all attachments instantly.</p>
+          </div>
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">2) AI Identifies Reseller Signals</h4>
+            <p class="muted">Our purpose‑built AI reads every line, looking for the specific, nuanced signals of a
+              "wrapper contract"—named vendors, pass‑through language, and more.</p>
+          </div>
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">3) Get Your Actionable Playbook</h4>
+            <p class="muted">Receive a "Wrapper Contract Likelihood" score, a list of the key buy signals, and a
+              strategic
+              plan to engage partners and win the deal.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Showcase: real analysis screenshot -->
+    <section class="showcase-section">
+      <div class="container section-pad-lg">
+        <h3 class="showcase-headline">This Isn’t a Software Contract. It’s a Hidden Reseller Opportunity.</h3>
+        <p class="showcase-subheadline">See how our AI analyzed this $310,000 FEMA contract and instantly identified it
+          as
+          a high‑potential ‘wrapper’ deal, providing the exact playbook for a savvy small business to win it.</p>
+        <div class="showcase-container">
+          <!-- Column 2 on desktop: image (no overlays) -->
+          <div class="showcase-image-wrapper">
+            <img src="./app_screenshot.png" loading="lazy" decoding="async"
+              alt="Screenshot of the SAM Tracker AI analysis, showing winnability score, red flags and recommended action."
+              class="analysis-screenshot" />
+          </div>
+
+          <!-- Explainer cards: always below image; 3-up on wide screens -->
+          <div class="explainer-cards-wrapper">
+            <div class="explainer-card">
+              <h4>Instantly Quantify the Opportunity</h4>
+              <p>Our "Wrapper Contract Likelihood" score cuts through the noise. It doesn’t just measure ‘fit’; it tells
+                you with 95% certainty that this is a hardware pass‑through deal, so you can stop guessing and start
+                strategizing.</p>
+            </div>
+            <div class="explainer-card">
+              <h4>Turn “Red Flags” into Green Lights</h4>
+              <p>What looks like a risk to generic bidders is your competitive advantage. Our AI pinpoints signals like
+                a
+                named vendor (Dell) and a pass‑through structure, confirming this opportunity is designed for a
+                reseller,
+                not a developer.</p>
+            </div>
+            <div class="explainer-card">
+              <h4>Get an Actionable Sales Playbook</h4>
+              <p>This is where data becomes revenue. You don’t just get an analysis; you get a step‑by‑step plan. We
+                tell
+                you who to call (Dell’s sales team, major distributors), what to ask for (quotes, partner pricing), and
+                what compliance issues to watch for (non‑TAA CLINs).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Credibility / origin story -->
+    <section>
+      <div class="container section-pad-sm">
+        <div class="card glass">
+          <h3 style="margin:0 0 8px;">Your Unfair Advantage</h3>
+          <p class="muted" style="margin:0;">SAM Tracker wasn’t built in a vacuum. It was built by a small business
+            actively fighting in the trenches of government contracting — because we needed an edge. We knew that while
+            everyone else was reading the lines, the real opportunity was <strong>between</strong> the lines. This tool
+            is
+            the result. It’s a new class of analysis that turns publicly available data into a private, competitive
+            advantage. In today’s market, you are either leveraging this level of insight, or you are competing against
+            someone who is.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Benefits reframed -->
+    <section>
+      <div class="container section-pad">
+        <h3 style="margin:0 0 14px;">A Tool Built for Action, Not Just Analysis</h3>
+        <div class="grid grid-3">
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">Find the Deals Others Miss</h4>
+            <p class="muted">Go beyond basic keyword searches. Our AI is the only tool that specifically identifies the
+              linguistic patterns of hidden reseller and pass‑through deals, turning the noise of SAM.gov into a clear
+              signal of opportunity.</p>
+          </div>
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">Bid with a Decisive Advantage</h4>
+            <p class="muted">Walk into every bid knowing the game. Our analysis gives you the playbook — who to partner
+              with, what to ask for, and what compliance hurdles to watch out for — giving you a clear strategic edge.
+            </p>
+          </div>
+          <div class="card glass">
+            <h4 style="margin:0 0 6px;">Dominate a Lucrative Niche</h4>
+            <p class="muted">Stop competing against everyone. Focus your energy on a specific, high‑margin niche of
+              contracts that you are uniquely positioned to win. Build a repeatable pipeline of the opportunities your
+              competition doesn’t even see.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section id="join">
+      <div class="container section-pad">
+        <div class="card glass">
+          <form id="waitlist-form-bottom" class="inline-form">
+            <input id="email-bottom" type="email" required placeholder="Work email" aria-label="Email" />
+            <button class="btn" type="submit">Join Waitlist & Get Early Access</button>
+          </form>
+          <div id="form-error-bottom" class="error" style="display:none;"></div>
+          <p class="note">No spam. We’ll only email you about early access and product updates.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer container">Privacy‑friendly, no spam. © <span id="year"></span> SAM Tracker Technologies, LLC •
+    <a href="./privacy.html" class="muted" style="text-decoration:underline;">Privacy Policy</a>
+  </footer>
+
+  <script>
+    function extractOpportunityIdFromSamUrl(input) {
+      try {
+        const m = (input || '').match(/sam\.gov\/opp\/([A-Za-z0-9\-]+)\//);
+        if (m && m[1]) return m[1];
+        if (/^[A-Za-z0-9\-]{8,}$/.test(input || '')) return input;
+        return null;
+      } catch (_) { return null; }
+    }
+
+    const $email = document.getElementById('email');
+    const $form = document.getElementById('waitlist-form');
+    const $error = document.getElementById('form-error');
+    const $year = document.getElementById('year');
+    const $samUrl = null; // removed from main form
+    const $detected = null;
+
+    $year.textContent = new Date().getFullYear();
+
+    // SAM URL input moved to post-signup flow (future)
+
+    const $joinBtn = document.getElementById('join-btn');
+    const $headerJoin = document.getElementById('header-join');
+    if ($joinBtn) {
+      $joinBtn.addEventListener('click', () => $email?.focus());
+    }
+    if ($headerJoin) {
+      $headerJoin.addEventListener('click', (e) => {
+        // allow the anchor to navigate to #join, but also focus the bottom input
+        setTimeout(() => {
+          const target = document.getElementById('email') || document.getElementById('email-bottom');
+          if (target) target.focus();
+        }, 0);
+      });
+    }
+
+    $form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $error.style.display = 'none';
+      const email = ($email.value || '').trim();
+      if (!email) return;
+      try {
+        const base = window.MARKETING_API_BASE || 'http://localhost:3001';
+        const res = await fetch(base + '/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, source: 'marketing' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data && data.error) || 'Failed to join waitlist');
+        document.getElementById('primary-cta').innerHTML = `
+            <div class="card" style="background:transparent; border:none; padding:0;">
+              <p style="margin:0 0 4px; font-weight:700;">You're on the list! 🎉</p>
+              <p class="muted" style="margin:0;">We'll email you as soon as early access opens.</p>
+            </div>`;
+      } catch (err) {
+        $error.textContent = (err && err.message) || 'Something went wrong';
+        $error.style.display = 'block';
+      }
+    });
+
+    // Bottom form wiring
+    const $formBottom = document.getElementById('waitlist-form-bottom');
+    const $emailBottom = document.getElementById('email-bottom');
+    const $errorBottom = document.getElementById('form-error-bottom');
+    if ($formBottom && $emailBottom) {
+      $formBottom.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        $errorBottom.style.display = 'none';
+        const email = ($emailBottom.value || '').trim();
+        if (!email) return;
+        try {
+          const base = window.MARKETING_API_BASE || 'http://localhost:3001';
+          const res = await fetch(base + '/api/waitlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, source: 'marketing-bottom' })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error((data && data.error) || 'Failed to join waitlist');
+          $formBottom.outerHTML = '<div class="muted">Thanks — you\'re on the list! 🎉</div>';
+        } catch (err) {
+          $errorBottom.textContent = (err && err.message) || 'Something went wrong';
+          $errorBottom.style.display = 'block';
+        }
+      });
+    }
+  </script>
+</body>
+
+</html>
