@@ -275,6 +275,11 @@
       background: var(--accent-2);
     }
 
+    .btn[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .btn-outline {
       background: transparent;
       color: var(--text);
@@ -829,11 +834,28 @@
       });
     }
 
+    function setLoading(btn, isLoading) {
+      try {
+        if (!btn) return;
+        if (isLoading) {
+          btn.setAttribute('disabled', '');
+          btn.setAttribute('aria-busy', 'true');
+          if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent || '';
+          btn.textContent = 'Joining...';
+        } else {
+          btn.removeAttribute('disabled');
+          btn.removeAttribute('aria-busy');
+          if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+        }
+      } catch (_) { }
+    }
+
     $form.addEventListener('submit', async (e) => {
       e.preventDefault();
       $error.style.display = 'none';
       const email = ($email.value || '').trim();
       if (!email) return;
+      setLoading(document.getElementById('join-btn'), true);
       try {
         const base = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
         // Execute Turnstile (invisible) if present
@@ -880,6 +902,10 @@
       } catch (err) {
         $error.textContent = (err && err.message) || 'Something went wrong';
         $error.style.display = 'block';
+      } finally {
+        // Button may have been removed on success; guard lookup
+        const btn = document.getElementById('join-btn');
+        if (btn) setLoading(btn, false);
       }
     });
 
@@ -893,6 +919,8 @@
         $errorBottom.style.display = 'none';
         const email = ($emailBottom.value || '').trim();
         if (!email) return;
+        const submitBtn = $formBottom.querySelector('button[type="submit"]');
+        setLoading(submitBtn, true);
         try {
           const base = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
           // Execute Turnstile (invisible) if present
@@ -932,6 +960,10 @@
         } catch (err) {
           $errorBottom.textContent = (err && err.message) || 'Something went wrong';
           $errorBottom.style.display = 'block';
+        } finally {
+          // Button may be gone if form replaced; only restore if still present
+          const btn = $formBottom?.querySelector && $formBottom.querySelector('button[type="submit"]');
+          if (btn) setLoading(btn, false);
         }
       });
     }

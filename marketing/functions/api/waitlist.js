@@ -141,7 +141,7 @@ function json(data, status = 200) {
 }
 
 async function sendWelcomeEmail(env, toEmail) {
-  const from = env.RESEND_FROM || "SAM Tracker <hello@samtracker.com>";
+  const from = "SAM Tracker <hello@samtracker.com>";
   const subject = "You’re on the list! 🎯 Welcome to SAM Tracker";
   const text = [
     "Hi there,",
