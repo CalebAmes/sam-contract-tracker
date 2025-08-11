@@ -1,0 +1,6 @@
+# robots.txt for SAM Tracker marketing site
+User-agent: *
+Allow: /
+
+# Add your sitemap URL below after deployment, e.g.:
+Sitemap: https://samtracker.com/sitemap.xml

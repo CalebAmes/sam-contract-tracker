@@ -7,22 +7,32 @@
   <title>SAM Tracker - Find Hidden Reseller Deals on SAM.gov</title>
   <meta name="description"
     content="AI that detects 'wrapper contracts' on SAM.gov — hidden reseller opportunities with named vendors and pass‑through language. Join the waitlist for early access." />
+  <meta name="robots" content="index, follow" />
   <meta property="og:title" content="SAM Tracker — Hidden Reseller Opportunity Detector for SAM.gov" />
   <meta property="og:description"
     content="Paste any SAM.gov link. Our AI finds wrapper contracts, quantifies likelihood, and gives you a reseller playbook." />
   <meta property="og:type" content="website" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:site_name" content="SAM Tracker" />
+  <meta property="og:url" content="" id="og-url" />
+  <meta property="og:image" content="" id="og-image" />
   <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:title" content="SAM Tracker — Hidden Reseller Opportunity Detector for SAM.gov" />
+  <meta property="twitter:description"
+    content="Paste any SAM.gov link. Our AI finds wrapper contracts, quantifies likelihood, and gives you a reseller playbook." />
+  <meta property="twitter:image" content="" id="twitter-image" />
   <meta name="theme-color" content="#0b0b0c" />
+  <link rel="canonical" href="" id="canonical-link" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <!-- Favicons -->
-  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="16x16" />
-  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="32x32" />
-  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="48x48" />
-  <link rel="icon" href="./logo_transparent.png" type="image/png" sizes="192x192" />
-  <link rel="apple-touch-icon" href="./logo_transparent.png" sizes="180x180" />
-  <link rel="shortcut icon" href="./logo_transparent.png" type="image/png" />
+  <link rel="icon" href="./logo_transparent_small.png" type="image/png" sizes="16x16" />
+  <link rel="icon" href="./logo_transparent_small.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="./logo_transparent_small.png" type="image/png" sizes="48x48" />
+  <link rel="icon" href="./logo_transparent_small.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="./logo_transparent_small.png" sizes="180x180" />
+  <link rel="shortcut icon" href="./logo_transparent_small.png" type="image/png" />
   <style>
     :root {
       --bg: #0b0b0c;
@@ -486,13 +496,55 @@
     }
   </style>
   <script src="./config.js"></script>
+  <!-- Cloudflare Turnstile: load only if a site key is configured -->
+  <script>
+    (function loadTurnstile() {
+      try {
+        if (!window.MARKETING_TURNSTILE_SITEKEY) return;
+        var s = document.createElement('script');
+        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+        s.async = true; s.defer = true;
+        document.head.appendChild(s);
+      } catch (_) { }
+    })();
+  </script>
+  <script>
+    (function setSeoMeta() {
+      try {
+        var canonical = (window.MARKETING_CANONICAL && String(window.MARKETING_CANONICAL)) || String(window.location.href);
+        var canonicalEl = document.getElementById('canonical-link');
+        if (canonicalEl) canonicalEl.setAttribute('href', canonical);
+
+        var ogUrl = document.getElementById('og-url');
+        if (ogUrl) ogUrl.setAttribute('content', canonical);
+
+        var absoluteImage = new URL('./app_screenshot_small.jpg', document.baseURI).href;
+        var ogImg = document.getElementById('og-image');
+        if (ogImg) ogImg.setAttribute('content', absoluteImage);
+        var twImg = document.getElementById('twitter-image');
+        if (twImg) twImg.setAttribute('content', absoluteImage);
+
+        var orgLd = {
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: 'SAM Tracker',
+          url: canonical,
+          logo: new URL('./logo_transparent_small.png', document.baseURI).href
+        };
+        var script = document.createElement('script');
+        script.type = 'application/ld+json';
+        script.textContent = JSON.stringify(orgLd);
+        document.head.appendChild(script);
+      } catch (_) { }
+    })();
+  </script>
 </head>
 
 <body>
   <header class="header-glass">
     <div class="container" style="padding-block:12px; display:flex; align-items:center; justify-content:space-between;">
       <div style="display:flex; align-items:center; gap:10px;">
-        <img src="./logo_transparent.png" alt="SAM Tracker" width="56" height="56"
+        <img src="./logo_transparent_small.png" alt="SAM Tracker" width="56" height="56"
           style="display:block; border-radius:6px;" />
         <strong>SAM Tracker</strong>
       </div>
@@ -516,12 +568,14 @@
 
           <!-- Before / After visual -->
           <div class="card glass" style="margin-top:14px;">
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;">
-              <div class="card" style="background:rgba(0,0,0,0.25);">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px;" role="list"
+              aria-label="Before and after comparison">
+              <div class="card" style="background:rgba(0,0,0,0.25);" role="listitem">
                 <div class="muted" style="font-weight:600; margin-bottom:6px;">Before</div>
                 <div class="list">A 40‑Page "Software" RFQ • Mentions Dell 17 times • Seems impossible…</div>
               </div>
-              <div class="card" style="background:rgba(79,70,229,0.12); border-color: rgba(99,102,241,0.35);">
+              <div class="card" style="background:rgba(79,70,229,0.12); border-color: rgba(99,102,241,0.35);"
+                role="listitem">
                 <div class="muted" style="font-weight:600; margin-bottom:6px; color:#dfe2ff;">After (30s)</div>
                 <div class="list">95% Wrapper Contract Likelihood • Clear Reseller Signals • A Step‑by‑Step Sales
                   Playbook
@@ -534,12 +588,17 @@
           <div id="primary-cta" class="card glass" style="scroll-margin-top:80px;">
             <h3 style="margin:0 0 6px;">Get early access</h3>
             <p class="muted" style="margin:0 0 12px;">Join the waitlist. We’ll send early access and updates.</p>
-            <form id="waitlist-form" class="grid" style="grid-template-columns: 1fr; gap:10px;" action="#join">
-              <input id="email" type="email" required placeholder="Work email" aria-label="Email" />
+            <form id="waitlist-form" class="grid" style="grid-template-columns: 1fr; gap:10px;" action="#join"
+              autocomplete="on">
+              <input id="email" name="email" type="email" inputmode="email" required placeholder="Work email"
+                aria-label="Email" autocomplete="email" />
+              <input type="text" name="website" tabindex="-1" autocomplete="off"
+                style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true" />
+              <div id="turnstile-top" style="display:none;"></div>
               <button class="btn" type="submit" id="join-btn">Join Waitlist & Get Early Access</button>
             </form>
-            <div id="form-error" class="error" style="display:none;"></div>
-            <div class="trust-row">
+            <div id="form-error" class="error" style="display:none;" aria-live="polite" role="status"></div>
+            <div class="trust-row" aria-label="Trust indicators">
               <span style="opacity:.8;">No credit card</span>
               <span style="opacity:.35;">•</span>
               <span style="opacity:.8;">No spam</span>
@@ -587,13 +646,13 @@
         <div class="showcase-container">
           <!-- Column 2 on desktop: image (no overlays) -->
           <div class="showcase-image-wrapper">
-            <img src="./app_screenshot.png" loading="lazy" decoding="async"
+            <img src="./app_screenshot_small.jpg" loading="lazy" decoding="async"
               alt="Screenshot of the SAM Tracker AI analysis, showing winnability score, red flags and recommended action."
               class="analysis-screenshot" />
           </div>
 
           <!-- Explainer cards: always below image; 3-up on wide screens -->
-          <div class="explainer-cards-wrapper">
+          <div class="explainer-cards-wrapper" aria-label="Key benefits of SAM Tracker">
             <div class="explainer-card">
               <h4>Instantly Quantify the Opportunity</h4>
               <p>Our "Wrapper Contract Likelihood" score cuts through the noise. It doesn’t just measure ‘fit’; it tells
@@ -667,11 +726,15 @@
     <section id="join">
       <div class="container section-pad">
         <div class="card glass">
-          <form id="waitlist-form-bottom" class="inline-form">
-            <input id="email-bottom" type="email" required placeholder="Work email" aria-label="Email" />
+          <form id="waitlist-form-bottom" class="inline-form" autocomplete="on">
+            <input id="email-bottom" name="email" type="email" inputmode="email" required placeholder="Work email"
+              aria-label="Email" autocomplete="email" />
+            <input type="text" name="website" tabindex="-1" autocomplete="off" style="display:none;"
+              aria-hidden="true" />
+            <div id="turnstile-bottom" style="display:none;"></div>
             <button class="btn" type="submit">Join Waitlist & Get Early Access</button>
           </form>
-          <div id="form-error-bottom" class="error" style="display:none;"></div>
+          <div id="form-error-bottom" class="error" style="display:none;" aria-live="polite" role="status"></div>
           <p class="note">No spam. We’ll only email you about early access and product updates.</p>
         </div>
       </div>
@@ -681,6 +744,25 @@
   <footer class="footer container">Privacy‑friendly, no spam. © <span id="year"></span> SAM Tracker Technologies, LLC •
     <a href="./privacy.html" class="muted" style="text-decoration:underline;">Privacy Policy</a>
   </footer>
+
+  <!-- Tiny view beacon: cookie-free, ~200B -->
+  <script>
+    (() => {
+      try {
+        const u = new URLSearchParams(location.search);
+        const b = JSON.stringify({
+          p: location.pathname,
+          r: document.referrer || '',
+          s: u.get('utm_source') || '',
+          m: u.get('utm_medium') || '',
+          c: u.get('utm_campaign') || '',
+          d: u.get('utm_content') || ''
+        });
+        const origin = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
+        navigator.sendBeacon(origin + '/api/visit', new Blob([b], { type: 'application/json' }));
+      } catch (_) { }
+    })();
+  </script>
 
   <script>
     function extractOpportunityIdFromSamUrl(input) {
@@ -705,6 +787,35 @@
 
     const $joinBtn = document.getElementById('join-btn');
     const $headerJoin = document.getElementById('header-join');
+    const turnstileSiteKey = window.MARKETING_TURNSTILE_SITEKEY;
+    const $tsTop = document.getElementById('turnstile-top');
+    const $tsBottom = document.getElementById('turnstile-bottom');
+    let tsTopWidgetId = null;
+    let tsBottomWidgetId = null;
+
+    // Render invisible Turnstile if configured
+    window.addEventListener('load', () => {
+      try {
+        if (turnstileSiteKey && window.turnstile) {
+          if ($tsTop) {
+            $tsTop.style.display = 'block';
+            tsTopWidgetId = window.turnstile.render('#turnstile-top', {
+              sitekey: turnstileSiteKey,
+              size: 'invisible',
+              theme: 'light'
+            });
+          }
+          if ($tsBottom) {
+            $tsBottom.style.display = 'block';
+            tsBottomWidgetId = window.turnstile.render('#turnstile-bottom', {
+              sitekey: turnstileSiteKey,
+              size: 'invisible',
+              theme: 'light'
+            });
+          }
+        }
+      } catch (_) { }
+    });
     if ($joinBtn) {
       $joinBtn.addEventListener('click', () => $email?.focus());
     }
@@ -724,11 +835,20 @@
       const email = ($email.value || '').trim();
       if (!email) return;
       try {
-        const base = window.MARKETING_API_BASE || 'http://localhost:3001';
+        const base = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
+        // Execute Turnstile (invisible) if present
+        let turnstile_token = '';
+        try {
+          if (tsTopWidgetId && window.turnstile) {
+            await window.turnstile.execute(tsTopWidgetId);
+            turnstile_token = window.turnstile.getResponse(tsTopWidgetId) || '';
+            window.turnstile.reset(tsTopWidgetId);
+          }
+        } catch (_) { }
         const res = await fetch(base + '/api/waitlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, source: 'marketing' })
+          body: JSON.stringify({ email, source: 'marketing', turnstile_token })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error((data && data.error) || 'Failed to join waitlist');
@@ -736,7 +856,27 @@
             <div class="card" style="background:transparent; border:none; padding:0;">
               <p style="margin:0 0 4px; font-weight:700;">You're on the list! 🎉</p>
               <p class="muted" style="margin:0;">We'll email you as soon as early access opens.</p>
+              <p class="note" style="margin-top:8px;">
+                <a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a>
+              </p>
             </div>`;
+        // Persist success locally so the state survives refresh
+        try {
+          localStorage.setItem('samtracker_waitlist', JSON.stringify({ email, ts: Date.now() }));
+        } catch (_) { }
+        // Conversion beacon (cookie-free)
+        try {
+          const u = new URLSearchParams(location.search);
+          const conv = {
+            email,
+            utm_source: u.get('utm_source') || '',
+            utm_medium: u.get('utm_medium') || '',
+            utm_campaign: u.get('utm_campaign') || '',
+            utm_content: u.get('utm_content') || ''
+          };
+          const origin = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
+          navigator.sendBeacon(origin + '/api/convert', new Blob([JSON.stringify(conv)], { type: 'application/json' }));
+        } catch (_) { }
       } catch (err) {
         $error.textContent = (err && err.message) || 'Something went wrong';
         $error.style.display = 'block';
@@ -754,21 +894,82 @@
         const email = ($emailBottom.value || '').trim();
         if (!email) return;
         try {
-          const base = window.MARKETING_API_BASE || 'http://localhost:3001';
+          const base = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
+          // Execute Turnstile (invisible) if present
+          let turnstile_token = '';
+          try {
+            if (tsBottomWidgetId && window.turnstile) {
+              await window.turnstile.execute(tsBottomWidgetId);
+              turnstile_token = window.turnstile.getResponse(tsBottomWidgetId) || '';
+              window.turnstile.reset(tsBottomWidgetId);
+            }
+          } catch (_) { }
           const res = await fetch(base + '/api/waitlist', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, source: 'marketing-bottom' })
+            body: JSON.stringify({ email, source: 'marketing-bottom', turnstile_token })
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error((data && data.error) || 'Failed to join waitlist');
-          $formBottom.outerHTML = '<div class="muted">Thanks — you\'re on the list! 🎉</div>';
+          $formBottom.outerHTML = '<div><div class="muted">Thanks — you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
+          // Persist success locally so the state survives refresh
+          try {
+            localStorage.setItem('samtracker_waitlist', JSON.stringify({ email, ts: Date.now() }));
+          } catch (_) { }
+          // Conversion beacon (cookie-free)
+          try {
+            const u = new URLSearchParams(location.search);
+            const conv = {
+              email,
+              utm_source: u.get('utm_source') || '',
+              utm_medium: u.get('utm_medium') || '',
+              utm_campaign: u.get('utm_campaign') || '',
+              utm_content: u.get('utm_content') || ''
+            };
+            const origin = (window.MARKETING_API_BASE || 'https://samtracker.com').replace(/\/$/, '');
+            navigator.sendBeacon(origin + '/api/convert', new Blob([JSON.stringify(conv)], { type: 'application/json' }));
+          } catch (_) { }
         } catch (err) {
           $errorBottom.textContent = (err && err.message) || 'Something went wrong';
           $errorBottom.style.display = 'block';
         }
       });
     }
+
+    // On load: if we previously signed up, reflect the success UI immediately
+    try {
+      const stored = localStorage.getItem('samtracker_waitlist');
+      const parsed = stored ? JSON.parse(stored) : null;
+      if (parsed && parsed.email) {
+        const cta = document.getElementById('primary-cta');
+        if (cta) {
+          cta.innerHTML = `
+            <div class="card" style="background:transparent; border:none; padding:0;">
+              <p style="margin:0 0 4px; font-weight:700;">You're on the list! 🎉</p>
+              <p class="muted" style="margin:0;">We'll email you as soon as early access opens.</p>
+              <p class="note" style="margin-top:8px;">
+                <a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a>
+              </p>
+            </div>`;
+        }
+        const formBottomEl = document.getElementById('waitlist-form-bottom');
+        if (formBottomEl) {
+          formBottomEl.outerHTML = '<div><div class="muted">Thanks — you\'re on the list! 🎉</div><p class="note" style="margin-top:8px;"><a href="#" data-join-again style="text-decoration:underline;">Join again with another email</a></p></div>';
+        }
+      }
+    } catch (_) { }
+
+    // Global handler: allow users to "join again" by clearing local state
+    document.addEventListener('click', function (ev) {
+      try {
+        var target = ev.target && (ev.target.closest ? ev.target.closest('[data-join-again]') : null);
+        if (target) {
+          ev.preventDefault();
+          try { localStorage.removeItem('samtracker_waitlist'); } catch (_) { }
+          location.reload();
+        }
+      } catch (_) { }
+    });
   </script>
 </body>
 
