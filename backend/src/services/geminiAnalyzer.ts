@@ -1,16 +1,22 @@
-import axios from 'axios';
-import fs from 'fs/promises';
-import path from 'path';
-import { FileConverter, ConvertedFile } from './fileConverter';
+import axios from "axios";
+import fs from "fs/promises";
+import path from "path";
+import { FileConverter, ConvertedFile } from "./fileConverter";
 
 export interface WrapperAnalysis {
   wrapperScore: number;
-  contractType: 'SaaS Reseller' | 'Hardware Reseller' | 'Professional Services' | 'Hybrid' | 'Custom Development' | 'Unknown';
+  contractType:
+    | "SaaS Reseller"
+    | "Hardware Reseller"
+    | "Professional Services"
+    | "Hybrid"
+    | "Custom Development"
+    | "Unknown";
   summary: string;
   redFlags: Array<{
     flag: string;
     detail: string;
-    severity: 'high' | 'medium' | 'low';
+    severity: "high" | "medium" | "low";
   }>;
   incumbentInfo: {
     vendor: string | null;
@@ -21,10 +27,10 @@ export interface WrapperAnalysis {
   keyDates: {
     currentDeadline: string;
     contractStart: string;
-    urgencyLevel: 'critical' | 'high' | 'medium' | 'low';
+    urgencyLevel: "critical" | "high" | "medium" | "low";
   };
   estimatedValue: string;
-  competitionLevel: 'low' | 'medium' | 'high';
+  competitionLevel: "low" | "medium" | "high";
   competitionNotes: string;
 }
 
@@ -69,18 +75,91 @@ Red flags to look for:
 - References to "current system" or "existing contractor"
 - Migration requirements from specific systems`;
 
-export type GeminiModel = '2.0-flash' | '2.5-flash' | '2.5-pro';
+export type GeminiModel = "2.0-flash" | "2.5-flash" | "2.5-pro";
 
 export class GeminiAnalyzer {
-  private static BASE_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+  private static BASE_API_URL =
+    "https://generativelanguage.googleapis.com/v1beta/models";
 
   private static getModelEndpoint(model: GeminiModel): string {
     const modelMap = {
-      '2.0-flash': 'gemini-2.0-flash',
-      '2.5-flash': 'gemini-2.5-flash',
-      '2.5-pro': 'gemini-2.5-pro'
+      "2.0-flash": "gemini-2.0-flash",
+      "2.5-flash": "gemini-2.5-flash",
+      "2.5-pro": "gemini-2.5-pro",
     };
     return `${this.BASE_API_URL}/${modelMap[model]}:generateContent`;
+  }
+
+  // Build Gemini content parts from contract data and files (reusable)
+  static async buildContentParts(
+    contractData: any,
+    filePaths: string[],
+    progressCallback?: (progress: number, message: string) => Promise<void>
+  ): Promise<any[]> {
+    // Prepare the parts array with contract data and file uploads
+    const parts: any[] = [
+      {
+        text: `${SYSTEM_PROMPT}\n\nContract Information:\nTitle: ${
+          contractData.title
+        }\nOrganization: ${
+          contractData.organizationId || "Unknown"
+        }\nPosted Date: ${contractData.postedDate}\nDeadline: ${
+          contractData.deadline
+        }\nDescription: ${
+          contractData.description || "No description"
+        }\nSet Aside: ${contractData.setAside || "Unknown"}\nClassification: ${
+          contractData.classificationCode || "Unknown"
+        }`,
+      },
+    ];
+
+    // Track converted files for cleanup
+    const convertedFiles: ConvertedFile[] = [];
+    try {
+      // Add documents as inline data
+      for (let i = 0; i < filePaths.length; i++) {
+        const filePath = filePaths[i];
+        if (progressCallback) {
+          await progressCallback(
+            40 + (i / filePaths.length) * 20,
+            `Processing document ${i + 1} of ${filePaths.length}...`
+          );
+        }
+
+        let actualFilePath = filePath;
+        let mimeType = FileConverter.getMimeType(filePath);
+
+        // Check if file needs conversion
+        if (!FileConverter.isSupportedByGemini(mimeType)) {
+          const converted = await FileConverter.convertFile(filePath);
+          if (converted) {
+            convertedFiles.push(converted);
+            actualFilePath = converted.convertedPath;
+            mimeType = converted.convertedMimeType;
+            if (converted.conversionNotes && progressCallback) {
+              await progressCallback(
+                40 + (i / filePaths.length) * 20,
+                `${converted.conversionNotes}`
+              );
+            }
+          }
+        }
+
+        const fileData = await fs.readFile(actualFilePath);
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: fileData.toString("base64"),
+          },
+        });
+      }
+    } finally {
+      if (convertedFiles.length > 0) {
+        await FileConverter.cleanupConversions(convertedFiles);
+      }
+    }
+
+    return parts;
   }
 
   static async analyzeContract(
@@ -88,185 +167,202 @@ export class GeminiAnalyzer {
     uploadedFilePaths: string[],
     apiKey: string,
     progressCallback?: (progress: number, message: string) => Promise<void>,
-    model: GeminiModel = '2.0-flash'
+    model: GeminiModel = "2.0-flash"
   ): Promise<WrapperAnalysis> {
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY not configured');
+      throw new Error("GEMINI_API_KEY not configured");
     }
 
     try {
       if (progressCallback) {
-        await progressCallback(35, 'Preparing contract data for analysis...');
+        await progressCallback(35, "Preparing contract data for analysis...");
       }
-      
-      // Prepare the parts array with contract data and file uploads
-      const parts: any[] = [
-        {
-          text: `${SYSTEM_PROMPT}\n\nContract Information:\nTitle: ${contractData.title}\nOrganization: ${contractData.organizationId || 'Unknown'}\nPosted Date: ${contractData.postedDate}\nDeadline: ${contractData.deadline}\nDescription: ${contractData.description || 'No description'}\nSet Aside: ${contractData.setAside || 'Unknown'}\nClassification: ${contractData.classificationCode || 'Unknown'}`
-        }
-      ];
 
-      // Track converted files for cleanup
-      const convertedFiles: ConvertedFile[] = [];
-      
-      try {
-        // Add uploaded documents as inline data
-        for (let i = 0; i < uploadedFilePaths.length; i++) {
-          const filePath = uploadedFilePaths[i];
-          if (progressCallback) {
-            await progressCallback(
-              40 + (i / uploadedFilePaths.length) * 20, 
-              `Processing document ${i + 1} of ${uploadedFilePaths.length}...`
-            );
-          }
-          
-          let actualFilePath = filePath;
-          let mimeType = FileConverter.getMimeType(filePath);
-          
-          // Check if file needs conversion
-          if (!FileConverter.isSupportedByGemini(mimeType)) {
-            console.log(`File ${path.basename(filePath)} (${mimeType}) needs conversion`);
-            
-            const converted = await FileConverter.convertFile(filePath);
-            if (converted) {
-              convertedFiles.push(converted);
-              actualFilePath = converted.convertedPath;
-              mimeType = converted.convertedMimeType;
-              console.log(`Converted ${path.basename(filePath)} to ${mimeType}`);
-              
-              if (converted.conversionNotes && progressCallback) {
-                await progressCallback(
-                  40 + (i / uploadedFilePaths.length) * 20,
-                  `${converted.conversionNotes}`
-                );
-              }
-            }
-          }
-          
-          const fileData = await fs.readFile(actualFilePath);
-          
-          parts.push({
-            inline_data: {
-              mime_type: mimeType,
-              data: fileData.toString('base64')
-            }
-          });
-        }
-      } finally {
-        // Always clean up converted files
-        if (convertedFiles.length > 0) {
-          console.log(`Cleaning up ${convertedFiles.length} converted files`);
-          await FileConverter.cleanupConversions(convertedFiles);
-        }
-      }
+      // Build parts via helper
+      const parts = await GeminiAnalyzer.buildContentParts(
+        contractData,
+        uploadedFilePaths,
+        progressCallback
+      );
 
       if (progressCallback) {
-        await progressCallback(65, 'Sending documents to Gemini AI for analysis...');
+        await progressCallback(
+          65,
+          "Sending documents to Gemini AI for analysis..."
+        );
       }
 
       const endpoint = this.getModelEndpoint(model);
-      console.log(`Using Gemini model: ${model} at endpoint: ${endpoint}`);
-      
+
       // Configure generation parameters based on model
       const generationConfig = {
         temperature: 0.2,
         topK: 40,
         topP: 0.95,
-        maxOutputTokens: model === '2.5-pro' ? 10000 : model === '2.5-flash' ? 10000 : 2048,
+        maxOutputTokens:
+          model === "2.5-pro" ? 10000 : model === "2.5-flash" ? 10000 : 2048,
       };
+
+      // Optional: dump the prompt and payload to a JSON file for inspection
+      try {
+        if (process.env.ANALYSIS_DUMP_PROMPT === "1") {
+          const logsDir = path.join(
+            __dirname,
+            "..",
+            "..",
+            "..",
+            "logs",
+            "analysis"
+          );
+          await fs.mkdir(logsDir, { recursive: true });
+          const ts = new Date().toISOString().replace(/[:.]/g, "-");
+          const contractId =
+            contractData?.id || contractData?.contractId || "unknown";
+          const filename = `${ts}-analysis-prompt-${contractId}.json`;
+          const filePath = path.join(logsDir, filename);
+
+          const payload = {
+            meta: {
+              contractId,
+              model,
+              endpoint,
+            },
+            request: {
+              contents: [{ parts }],
+              generationConfig,
+            },
+          };
+          await fs.writeFile(
+            filePath,
+            JSON.stringify(payload, null, 2),
+            "utf-8"
+          );
+        }
+      } catch (e) {
+        console.warn("Failed to dump analysis prompt payload:", e);
+      }
 
       const response = await axios.post(
         `${endpoint}?key=${apiKey}`,
         {
-          contents: [{
-            parts: parts
-          }],
+          contents: [
+            {
+              parts: parts,
+            },
+          ],
           generationConfig,
           safetySettings: [
             {
               category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_NONE"
+              threshold: "BLOCK_NONE",
             },
             {
               category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "BLOCK_NONE"
+              threshold: "BLOCK_NONE",
             },
             {
               category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_NONE"
+              threshold: "BLOCK_NONE",
             },
             {
               category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_NONE"
-            }
-          ]
+              threshold: "BLOCK_NONE",
+            },
+          ],
         },
         {
           headers: {
-            'Content-Type': 'application/json',
-          }
+            "Content-Type": "application/json",
+          },
         }
       );
 
       if (progressCallback) {
-        await progressCallback(85, 'Processing Gemini AI response...');
+        await progressCallback(85, "Processing Gemini AI response...");
       }
 
       // Check response structure and log for debugging
-      console.log('Gemini API Response Status:', response.status);
-      console.log('Gemini API Response Data:', JSON.stringify(response.data, null, 2));
-      
-      if (!response.data || !response.data.candidates || !response.data.candidates[0]) {
-        console.error('Invalid Gemini API response structure:', response.data);
-        throw new Error(`Invalid Gemini API response: ${JSON.stringify(response.data)}`);
+      console.log("Gemini API Response Status:", response.status);
+      console.log(
+        "Gemini API Response Data:",
+        JSON.stringify(response.data, null, 2)
+      );
+
+      if (
+        !response.data ||
+        !response.data.candidates ||
+        !response.data.candidates[0]
+      ) {
+        console.error("Invalid Gemini API response structure:", response.data);
+        throw new Error(
+          `Invalid Gemini API response: ${JSON.stringify(response.data)}`
+        );
       }
 
       const candidate = response.data.candidates[0];
-      
+
       // Handle MAX_TOKENS finish reason
-      if (candidate.finishReason === 'MAX_TOKENS') {
-        console.error('Gemini response was cut off due to max tokens limit');
-        throw new Error(`Analysis incomplete: The ${model} model reached its maximum token limit. Try using a simpler prompt or switch to a model with higher limits.`);
-      }
-      
-      // Handle other finish reasons that might not have content
-      if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-        console.error('Gemini response finished with reason:', candidate.finishReason);
-        throw new Error(`Analysis failed: The model finished with reason "${candidate.finishReason}". Please try again or use a different model.`);
+      if (candidate.finishReason === "MAX_TOKENS") {
+        console.error("Gemini response was cut off due to max tokens limit");
+        throw new Error(
+          `Analysis incomplete: The ${model} model reached its maximum token limit. Try using a simpler prompt or switch to a model with higher limits.`
+        );
       }
 
-      if (!candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
-        console.error('Invalid candidate structure:', candidate);
-        throw new Error(`Invalid candidate structure: ${JSON.stringify(candidate)}`);
+      // Handle other finish reasons that might not have content
+      if (candidate.finishReason && candidate.finishReason !== "STOP") {
+        console.error(
+          "Gemini response finished with reason:",
+          candidate.finishReason
+        );
+        throw new Error(
+          `Analysis failed: The model finished with reason "${candidate.finishReason}". Please try again or use a different model.`
+        );
+      }
+
+      if (
+        !candidate.content ||
+        !candidate.content.parts ||
+        !candidate.content.parts[0]
+      ) {
+        console.error("Invalid candidate structure:", candidate);
+        throw new Error(
+          `Invalid candidate structure: ${JSON.stringify(candidate)}`
+        );
       }
 
       const result = candidate.content.parts[0].text;
-      
+
       // Clean up the response - sometimes Gemini returns JSON wrapped in markdown
       let cleanedResult = result;
-      if (result.includes('```json')) {
+      if (result.includes("```json")) {
         cleanedResult = result.match(/```json\n([\s\S]*?)\n```/)?.[1] || result;
-      } else if (result.includes('```')) {
+      } else if (result.includes("```")) {
         cleanedResult = result.match(/```\n([\s\S]*?)\n```/)?.[1] || result;
       }
-      
+
       // Parse the JSON response
       const analysis = JSON.parse(cleanedResult);
-      
+
       return analysis as WrapperAnalysis;
     } catch (error) {
-      console.error('Error analyzing contract with Gemini:', error instanceof Error ? error.message : error);
+      console.error(
+        "Error analyzing contract with Gemini:",
+        error instanceof Error ? error.message : error
+      );
       if (axios.isAxiosError(error)) {
-        console.error('Axios error details:');
-        console.error('- Status:', error.response?.status);
-        console.error('- Status text:', error.response?.statusText);
-        console.error('- Request URL:', error.config?.url);
-        console.error('- Request Method:', error.config?.method);
-        console.error('- Response headers:', error.response?.headers);
-        console.error('- Response data:', JSON.stringify(error.response?.data, null, 2));
+        console.error("Axios error details:");
+        console.error("- Status:", error.response?.status);
+        console.error("- Status text:", error.response?.statusText);
+        console.error("- Request URL:", error.config?.url);
+        console.error("- Request Method:", error.config?.method);
+        console.error("- Response headers:", error.response?.headers);
+        console.error(
+          "- Response data:",
+          JSON.stringify(error.response?.data, null, 2)
+        );
       }
       throw error;
     }
   }
-
 }

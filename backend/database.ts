@@ -216,6 +216,21 @@ class DatabaseService {
         )
       `);
 
+      // Solicitation documents cache (shared across accounts by solicitation number)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS solicitation_documents (
+          id TEXT PRIMARY KEY,
+          solicitation_id TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          bytes INTEGER,
+          sha256 TEXT,
+          stored_path TEXT NOT NULL,
+          text_path TEXT,
+          created_at TEXT NOT NULL
+        )
+      `);
+
       // AI Analysis table with versioning support
       this.db.run(`
         CREATE TABLE IF NOT EXISTS ai_analysis (
@@ -272,6 +287,57 @@ class DatabaseService {
           FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
         )
       `);
+
+      // Chat sessions table
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL,
+          title TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
+        )
+      `);
+
+      // Chat messages table
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          contract_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          model TEXT,
+          input_tokens INTEGER,
+          output_tokens INTEGER,
+          duration_ms INTEGER,
+          feedback INTEGER,
+          FOREIGN KEY (session_id) REFERENCES chat_sessions (id) ON DELETE CASCADE,
+          FOREIGN KEY (contract_id) REFERENCES contracts (id) ON DELETE CASCADE
+        )
+      `);
+
+      // Migrations for chat message metadata
+      const addCol = (name: string, type: string) => {
+        this.db.run(
+          `ALTER TABLE chat_messages ADD COLUMN ${name} ${type}`,
+          (err) => {
+            if (err && !err.message.includes("duplicate column name")) {
+              console.error(
+                `Error adding column ${name} to chat_messages:`,
+                err
+              );
+            }
+          }
+        );
+      };
+      addCol("model", "TEXT");
+      addCol("input_tokens", "INTEGER");
+      addCol("output_tokens", "INTEGER");
+      addCol("duration_ms", "INTEGER");
+      addCol("feedback", "INTEGER");
 
       // Waitlist table (for marketing)
       this.db.run(`
@@ -537,6 +603,74 @@ class DatabaseService {
             resolve(attachments);
           }
         }
+      );
+    });
+  }
+
+  // --- Solicitation documents helpers ---
+  async addSolicitationDocument(row: {
+    id: string;
+    solicitationId: string;
+    filename: string;
+    mimeType: string;
+    bytes?: number;
+    sha256?: string;
+    storedPath: string;
+    textPath?: string;
+    createdAt: string;
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT OR REPLACE INTO solicitation_documents (id, solicitation_id, filename, mime_type, bytes, sha256, stored_path, text_path, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          row.id,
+          row.solicitationId,
+          row.filename,
+          row.mimeType,
+          row.bytes || null,
+          row.sha256 || null,
+          row.storedPath,
+          row.textPath || null,
+          row.createdAt,
+        ],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+  }
+
+  async listSolicitationDocuments(solicitationId: string): Promise<
+    Array<{
+      id: string;
+      filename: string;
+      mimeType: string;
+      bytes: number | null;
+      sha256: string | null;
+      storedPath: string;
+      textPath: string | null;
+      createdAt: string;
+    }>
+  > {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT id, filename, mime_type as mimeType, bytes, sha256, stored_path as storedPath, text_path as textPath, created_at as createdAt
+         FROM solicitation_documents WHERE solicitation_id = ? ORDER BY created_at ASC`,
+        [solicitationId],
+        (err, rows) =>
+          err
+            ? reject(err)
+            : resolve(
+                (rows as Array<{
+                  id: string;
+                  filename: string;
+                  mimeType: string;
+                  bytes: number | null;
+                  sha256: string | null;
+                  storedPath: string;
+                  textPath: string | null;
+                  createdAt: string;
+                }>) || []
+              )
       );
     });
   }
@@ -1524,6 +1658,237 @@ class DatabaseService {
           } else {
             resolve(rows.map((row) => row.id));
           }
+        }
+      );
+    });
+  }
+
+  // Chat: sessions
+  async createChatSession(contractId: string, title?: string): Promise<string> {
+    const now = new Date().toISOString();
+    return new Promise((resolve, reject) => {
+      // First, check for an existing session for this contract
+      this.db.get(
+        `SELECT id FROM chat_sessions WHERE contract_id = ? ORDER BY updated_at DESC LIMIT 1`,
+        [contractId],
+        (err, row: any) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          if (row?.id) {
+            // Touch updated_at and return existing session
+            this.db.run(
+              `UPDATE chat_sessions SET updated_at = ? WHERE id = ?`,
+              [now, row.id],
+              (err2) => {
+                if (err2) reject(err2);
+                else resolve(row.id as string);
+              }
+            );
+            return;
+          }
+
+          // No existing session; create one
+          const sessionId = `chat-${contractId}-${Date.now()}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`;
+          this.db.run(
+            `INSERT INTO chat_sessions (id, contract_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+            [sessionId, contractId, title || "Default", now, now],
+            (insertErr) => {
+              if (insertErr) reject(insertErr);
+              else resolve(sessionId);
+            }
+          );
+        }
+      );
+    });
+  }
+
+  async getChatSessions(
+    contractId: string
+  ): Promise<
+    Array<{ id: string; title: string; createdAt: string; updatedAt: string }>
+  > {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT id, title, created_at as createdAt, updated_at as updatedAt FROM chat_sessions WHERE contract_id = ? ORDER BY updated_at DESC`,
+        [contractId],
+        (err, rows: any[]) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        }
+      );
+    });
+  }
+
+  async getChatSession(sessionId: string): Promise<{
+    id: string;
+    contractId: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT id, contract_id as contractId, title, created_at as createdAt, updated_at as updatedAt FROM chat_sessions WHERE id = ?`,
+        [sessionId],
+        (err, row: any) => {
+          if (err) reject(err);
+          else resolve(row || null);
+        }
+      );
+    });
+  }
+
+  // Chat: messages
+  async addChatMessage(
+    sessionId: string,
+    contractId: string,
+    role: "user" | "assistant" | "system",
+    content: string,
+    meta?: {
+      model?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      durationMs?: number;
+    }
+  ): Promise<string> {
+    const messageId = `msg-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+    const now = new Date().toISOString();
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT INTO chat_messages (id, session_id, contract_id, role, content, created_at, model, input_tokens, output_tokens, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          messageId,
+          sessionId,
+          contractId,
+          role,
+          content,
+          now,
+          meta?.model || null,
+          meta?.inputTokens ?? null,
+          meta?.outputTokens ?? null,
+          meta?.durationMs ?? null,
+        ],
+        (err) => {
+          if (err) reject(err);
+          else {
+            // Touch session updated_at
+            this.db.run(
+              `UPDATE chat_sessions SET updated_at = ? WHERE id = ?`,
+              [now, sessionId],
+              (err2) => {
+                if (err2) reject(err2);
+                else resolve(messageId);
+              }
+            );
+          }
+        }
+      );
+    });
+  }
+
+  async appendChatMessageContent(
+    messageId: string,
+    appendText: string,
+    meta?: { outputTokens?: number; durationMs?: number; model?: string }
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Read existing content then append
+      this.db.get(
+        `SELECT content, output_tokens as outputTokens, duration_ms as durationMs FROM chat_messages WHERE id = ?`,
+        [messageId],
+        (err, row: any) => {
+          if (err) return reject(err);
+          if (!row) return reject(new Error("Message not found"));
+          const newContent = (row.content || "") + appendText;
+          const newOutputTokens =
+            meta?.outputTokens ?? row.outputTokens ?? null;
+          const newDuration = meta?.durationMs ?? row.durationMs ?? null;
+          const now = new Date().toISOString();
+          this.db.run(
+            `UPDATE chat_messages SET content = ?, output_tokens = ?, duration_ms = ?, model = ?, created_at = ? WHERE id = ?`,
+            [
+              newContent,
+              newOutputTokens,
+              newDuration,
+              meta?.model || null,
+              now,
+              messageId,
+            ],
+            function (uErr) {
+              if (uErr) reject(uErr);
+              else resolve();
+            }
+          );
+        }
+      );
+    });
+  }
+
+  async getChatMessages(
+    sessionId: string,
+    limit: number = 100
+  ): Promise<
+    Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+      model?: string | null;
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      durationMs?: number | null;
+      feedback?: number | null;
+    }>
+  > {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT id, role, content, created_at as createdAt, model, input_tokens as inputTokens, output_tokens as outputTokens, duration_ms as durationMs, feedback FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ?`,
+        [sessionId, limit],
+        (err, rows: any[]) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        }
+      );
+    });
+  }
+
+  async getChatMessageById(messageId: string): Promise<{
+    id: string;
+    sessionId: string;
+    contractId: string;
+    role: string;
+    content: string;
+    createdAt: string;
+  } | null> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT id, session_id as sessionId, contract_id as contractId, role, content, created_at as createdAt FROM chat_messages WHERE id = ?`,
+        [messageId],
+        (err, row: any) => {
+          if (err) reject(err);
+          else resolve(row || null);
+        }
+      );
+    });
+  }
+
+  async setChatMessageFeedback(
+    messageId: string,
+    value: number
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `UPDATE chat_messages SET feedback = ? WHERE id = ?`,
+        [value, messageId],
+        function (err) {
+          if (err) reject(err);
+          else resolve();
         }
       );
     });

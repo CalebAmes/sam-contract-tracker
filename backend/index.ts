@@ -37,6 +37,15 @@ import {
   searchDirect,
   addContractsFromSearch,
   checkContractsInDatabase,
+  createChatSession,
+  listChatSessions,
+  getChatMessages,
+  sendChatMessage,
+  streamChatMessage,
+  continueChatMessage,
+  setChatMessageFeedback,
+  ingestSolicitation,
+  solicitationStatus,
 } from "./routes";
 
 dotenv.config();
@@ -166,6 +175,19 @@ app.get("/api/health", healthCheckHandler);
 
 // Marketing / waitlist route
 app.post("/api/waitlist", addToWaitlist(db));
+
+// Chat routes
+app.post("/api/chat/sessions", createChatSession(db));
+app.get("/api/chat/sessions/:contractId", listChatSessions(db));
+app.get("/api/chat/messages/:sessionId", getChatMessages(db));
+app.post("/api/chat/messages/:sessionId", sendChatMessage(db));
+app.post("/api/chat/stream/:sessionId", streamChatMessage(db));
+app.post("/api/chat/continue/:sessionId", continueChatMessage(db));
+app.post("/api/chat/messages/:messageId/feedback", setChatMessageFeedback(db));
+
+// Solicitation context routes
+app.get("/api/solicitations/:solicitationId/status", solicitationStatus(db));
+app.post("/api/solicitations/:solicitationId/ingest", ingestSolicitation(db));
 
 // Graceful shutdown
 process.on("SIGINT", async () => {

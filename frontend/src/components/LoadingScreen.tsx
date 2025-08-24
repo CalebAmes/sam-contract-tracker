@@ -60,9 +60,9 @@ export default function LoadingScreen({ onComplete }: LoadingScreenProps) {
 
         <div className="text-center">
           <h1 className="text-2xl font-bold font-heading text-white mb-1">
-            Setton Industries
+            SAM Tracker
           </h1>
-          <p className="text-sm text-gray-300">SAM Contract Tracker</p>
+          <p className="text-sm text-gray-300">AI Analysis Tool</p>
         </div>
       </div>
     </div>

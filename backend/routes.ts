@@ -8,8 +8,11 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { createWriteStream } from "fs";
+import { FileConverter } from "./src/services/fileConverter";
 import { AnalysisStatus } from "./database";
 import { GeminiAnalyzer, GeminiModel } from "./src/services/geminiAnalyzer";
+import GeminiChatService, { GeminiChatModel } from "./src/services/geminiChat";
+import crypto from "crypto";
 
 // Simple helper to hash IP-like strings without bringing crypto heavy deps
 function simpleHash(input: string): string {
@@ -22,6 +25,114 @@ function simpleHash(input: string): string {
   return `h${Math.abs(hash)}`;
 }
 
+// Chat-specific system prompt (separate from analysis prompt)
+const CHAT_SYSTEM_PROMPT = `You are a contracts analyst for U.S. government solicitations.
+  Your job: analyze VAR and small business set-aside opportunities, and draft outputs grounded in the provided solicitation text.
+  Rules:
+  - Always use actual details from context (POC names, emails, solicitation numbers, dates, requirements).
+  - Do not generate placeholders like [POC Name] unless the information is genuinely missing.
+  - If information is missing, say so in one short sentence before providing the draft.
+  - Drafts must be professional, concise, and directly usable.`;
+
+// Build chat context parts (duplicate of analyzer logic but with chat system prompt)
+async function buildChatContextParts(
+  contractData: any,
+  filePaths: string[]
+): Promise<any[]> {
+  const today = new Date().toISOString().split("T")[0];
+  const parts: any[] = [
+    {
+      text: `${CHAT_SYSTEM_PROMPT}\n\nContract Information:\nTitle: ${
+        contractData?.title || "Unknown"
+      }\nOrganization: ${
+        contractData?.organizationId || "Unknown"
+      }\nPosted Date: ${contractData?.postedDate || ""}\nDeadline: ${
+        contractData?.deadline || ""
+      }\nDescription: ${
+        contractData?.description || "No description"
+      }\nSet Aside: ${contractData?.setAside || "Unknown"}\nClassification: ${
+        contractData?.classificationCode || "Unknown"
+      }\nCurrent date: ${today}`,
+    },
+  ];
+
+  const convertedFiles: Array<{ convertedPath: string }> = [];
+  try {
+    for (let i = 0; i < filePaths.length; i++) {
+      const filePath = filePaths[i];
+      let actualFilePath = filePath;
+      let mimeType = FileConverter.getMimeType(filePath);
+      if (!FileConverter.isSupportedByGemini(mimeType)) {
+        const converted = await FileConverter.convertFile(filePath);
+        if (converted) {
+          convertedFiles.push(converted);
+          actualFilePath = converted.convertedPath;
+          mimeType = converted.convertedMimeType;
+        }
+      }
+      const data = await fs.readFile(actualFilePath);
+      parts.push({
+        inline_data: { mime_type: mimeType, data: data.toString("base64") },
+      });
+    }
+  } finally {
+    if (convertedFiles.length > 0) {
+      await FileConverter.cleanupConversions(convertedFiles as any);
+    }
+  }
+  return parts;
+}
+
+// Local helper to send contents to Gemini
+async function sendGeminiContents(
+  contents: Array<{ role: string; parts: any[] }>,
+  apiKey: string,
+  model: GeminiChatModel
+): Promise<string> {
+  const endpoint = ((): string => {
+    const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+    const map: Record<string, string> = {
+      "2.0-flash": "gemini-2.0-flash",
+      "2.5-flash": "gemini-2.5-flash",
+      "2.5-pro": "gemini-2.5-pro",
+    };
+    return `${BASE}/${map[model]}:generateContent`;
+  })();
+  const generationConfig = {
+    temperature: 0.2,
+    topK: 40,
+    topP: 0.95,
+    maxOutputTokens: 10000,
+  };
+  const resp = await axios.post(
+    `${endpoint}?key=${apiKey}`,
+    {
+      contents,
+      generationConfig,
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_NONE",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_NONE",
+        },
+      ],
+    },
+    { headers: { "Content-Type": "application/json" } }
+  );
+  const candidate = (resp.data?.candidates || [])[0];
+  const text: string | undefined = candidate?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Invalid Gemini response");
+  if (text.includes("```")) {
+    const m = text.match(/```[a-zA-Z]*\n([\s\S]*?)\n```/);
+    return m?.[1] || text;
+  }
+  return text;
+}
 export const addToWaitlist =
   (db: DatabaseService) => async (req: Request, res: Response) => {
     try {
@@ -73,6 +184,17 @@ async function downloadAttachments(
   for (const attachment of attachments) {
     try {
       console.log(`Downloading attachment: ${attachment.name}`);
+      // Create a safe filename and absolute path
+      const safeFilename = attachment.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const filePath = path.join(downloadDir, safeFilename);
+
+      // If file already exists in tmp dir, reuse it (no re-download)
+      try {
+        await fs.access(filePath);
+        downloadedFiles.push(filePath);
+        console.log(`Reusing existing file: ${attachment.name}`);
+        continue;
+      } catch {}
 
       const response = await axios.get(attachment.url, {
         responseType: "stream",
@@ -99,10 +221,6 @@ async function downloadAttachments(
       });
 
       if (response.status === 200) {
-        // Create a safe filename
-        const safeFilename = attachment.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-        const filePath = path.join(downloadDir, safeFilename);
-
         // Create write stream and pipe the response
         const writer = createWriteStream(filePath);
         response.data.pipe(writer);
@@ -137,7 +255,7 @@ async function downloadAttachments(
 }
 
 export const fetchSingle =
-  (_db: DatabaseService) => async (req: Request, res: Response) => {
+  (db: DatabaseService) => async (req: Request, res: Response) => {
     try {
       const { opportunityId } = req.body;
 
@@ -1148,62 +1266,33 @@ export const analyzeContract =
             );
           }
 
-          // Download attachments if not bypassed
-          let attachmentFilePaths: string[] = [];
-          if (
-            !bypassAttachments &&
-            contract.attachments &&
-            contract.attachments.length > 0
-          ) {
+          // Use shared helper for document gathering
+          const attachmentFilePaths = await getDocumentFilePaths(
+            db,
+            contract,
+            bypassAttachments,
+            uploadDir
+          );
+          if (attachmentFilePaths.length > 0) {
             await db.updateAnalysisProgress(
               id,
-              20,
-              `Downloading ${contract.attachments.length} attachment${
-                contract.attachments.length !== 1 ? "s" : ""
-              }...`
+              22,
+              `Using ${attachmentFilePaths.length} documents`
             );
-
-            try {
-              attachmentFilePaths = await downloadAttachments(
-                contract.attachments,
-                uploadDir
-              );
-              console.log(
-                `Downloaded ${attachmentFilePaths.length} attachments for contract ${id}`
-              );
-              await db.updateAnalysisProgress(
-                id,
-                25,
-                `Downloaded ${attachmentFilePaths.length} attachment${
-                  attachmentFilePaths.length !== 1 ? "s" : ""
-                }`
-              );
-            } catch (downloadError) {
-              console.error(
-                `Attachment download failed for contract ${id}:`,
-                downloadError
-              );
-              await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
-              await db.updateAnalysisProgress(
-                id,
-                0,
-                "Attachment download failed"
-              );
-              return;
-            }
           } else if (bypassAttachments) {
-            console.log(`Bypassing attachment downloads for contract ${id}`);
             await db.updateAnalysisProgress(
               id,
               20,
               "Bypassing attachment downloads..."
             );
+          } else {
+            await db.updateAnalysisProgress(id, 20, "No documents available");
           }
 
-          // Combine uploaded files and downloaded attachments
+          // Combine uploaded files and downloaded/cached attachments
           const allFilePaths = [...uploadedFilePaths, ...attachmentFilePaths];
           console.log(
-            `Total files for analysis: ${allFilePaths.length} (${uploadedFilePaths.length} uploaded, ${attachmentFilePaths.length} downloaded)`
+            `Total files for analysis: ${allFilePaths.length} (${uploadedFilePaths.length} uploaded, ${attachmentFilePaths.length} attachments)`
           );
 
           if (allFilePaths.length === 0) {
@@ -1367,23 +1456,9 @@ export const analyzeContract =
           const documentsAnalyzed: Array<{ filename: string; type: string }> =
             [];
 
-          // Add uploaded files info
-          if (uploadedFiles && uploadedFiles.length > 0) {
-            uploadedFiles.forEach((file: any) => {
-              documentsAnalyzed.push({
-                filename: file.name,
-                type: file.type,
-              });
-            });
-          }
-
-          // Add downloaded attachments info only if they were actually downloaded
-          if (
-            !bypassAttachments &&
-            contract.attachments &&
-            contract.attachments.length > 0
-          ) {
-            contract.attachments.forEach((attachment: any) => {
+          // Add attachments info from DB if available
+          if (contract.attachments && contract.attachments.length > 0) {
+            (contract.attachments || []).forEach((attachment: any) => {
               documentsAnalyzed.push({
                 filename: attachment.name,
                 type: attachment.type,
@@ -1401,15 +1476,7 @@ export const analyzeContract =
           await db.updateContractAnalysisStatus(id, AnalysisStatus.COMPLETED);
           await db.updateAnalysisProgress(id, 100, "Analysis complete!");
 
-          // Clean up uploaded files
-          try {
-            await fs.rm(uploadDir, { recursive: true, force: true });
-            console.log(`Cleaned up upload directory for contract ${id}`);
-          } catch (cleanupError) {
-            console.error(
-              `Error cleaning up upload directory: ${cleanupError}`
-            );
-          }
+          // Do not delete tmp docs; keep for reuse
 
           console.log(`Analysis completed for contract ${id}`);
         } catch (error) {
@@ -1456,17 +1523,7 @@ export const analyzeContract =
           );
           await db.updateContractAnalysisStatus(id, AnalysisStatus.FAILED);
 
-          // Clean up uploaded files even on error
-          try {
-            await fs.rm(uploadDir, { recursive: true, force: true });
-            console.log(
-              `Cleaned up upload directory for contract ${id} after error`
-            );
-          } catch (cleanupError) {
-            console.error(
-              `Error cleaning up upload directory after failure: ${cleanupError}`
-            );
-          }
+          // Do not delete tmp docs on error either; aids debugging and reuse
         }
       })();
 
@@ -1486,6 +1543,632 @@ export const healthCheckHandler = (_req: Request, res: Response) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 };
 
+// Chat endpoints (no document context yet)
+export const createChatSession =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { contractId, title } = req.body || {};
+      if (!contractId) {
+        return res.status(400).json({ error: "contractId is required" });
+      }
+
+      const contract = await db.getContract(contractId);
+      if (!contract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+
+      const sessionId = await db.createChatSession(contractId, title);
+      res.json({ sessionId });
+    } catch (error: any) {
+      console.error("Error creating chat session:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const listChatSessions =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { contractId } = req.params;
+      if (!contractId) {
+        return res.status(400).json({ error: "contractId is required" });
+      }
+      const sessions = await db.getChatSessions(contractId);
+      res.json({ sessions });
+    } catch (error: any) {
+      console.error("Error listing chat sessions:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const getChatMessages =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      if (!sessionId) {
+        return res.status(400).json({ error: "sessionId is required" });
+      }
+      const messages = await db.getChatMessages(sessionId, 500);
+      res.json({ messages });
+    } catch (error: any) {
+      console.error("Error getting chat messages:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+export const sendChatMessage =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      const { contractId, message, model } =
+        req.body ||
+        ({} as {
+          contractId: string;
+          message: string;
+          model?: GeminiChatModel;
+        });
+      if (!sessionId || !contractId || !message) {
+        return res
+          .status(400)
+          .json({ error: "sessionId, contractId and message are required" });
+      }
+
+      const session = await db.getChatSession(sessionId);
+      if (!session || session.contractId !== contractId) {
+        return res.status(404).json({ error: "Chat session not found" });
+      }
+
+      // Persist user message
+      await db.addChatMessage(sessionId, contractId, "user", message);
+
+      // Prepare simple conversation (last N messages)
+      const history = await db.getChatMessages(sessionId, 50);
+      const messages = history.map((m) => ({
+        role: m.role as "user" | "assistant" | "system",
+        content: m.content,
+      }));
+
+      // Generate reply
+      const reply = await GeminiChatService.generateReply(
+        messages.concat([{ role: "user", content: message }]),
+        process.env.GEMINI_API_KEY || "",
+        (model as GeminiChatModel) || "2.0-flash"
+      );
+
+      await db.addChatMessage(sessionId, contractId, "assistant", reply);
+
+      res.json({ reply });
+    } catch (error: any) {
+      console.error("Error sending chat message:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+// Helpers to compute sha256
+function sha256OfBuffer(buf: Buffer): string {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+// Shared: get document file paths from per-contract tmp directory
+async function getDocumentFilePaths(
+  db: DatabaseService,
+  contract: any,
+  bypassAttachments: boolean = false,
+  uploadDir?: string
+): Promise<string[]> {
+  const paths: string[] = [];
+  if (uploadDir) {
+    try {
+      // Include any existing files in the tmp dir
+      const files = await fs.readdir(uploadDir);
+      for (const f of files) {
+        paths.push(path.join(uploadDir, f));
+      }
+    } catch {}
+  }
+
+  // Download attachments to tmp dir if not bypassed
+  if (
+    !bypassAttachments &&
+    contract.attachments &&
+    contract.attachments.length > 0 &&
+    uploadDir
+  ) {
+    try {
+      const downloaded = await downloadAttachments(
+        contract.attachments,
+        uploadDir
+      );
+      // Merge and de-duplicate
+      const set = new Set<string>([...paths, ...downloaded]);
+      return Array.from(set);
+    } catch (downloadError) {
+      console.error(
+        `Attachment download failed for contract ${contract.id}:`,
+        downloadError
+      );
+      // Return whatever we already had
+      return paths;
+    }
+  }
+
+  return paths;
+}
+
+// Build chat prompt with lighter system prompt, latest analysis, and doc context
+async function buildChatPrompt(
+  db: DatabaseService,
+  params: {
+    contractId: string;
+    sessionId: string;
+    solicitationId?: string;
+    userMessage: string;
+  }
+) {
+  const convo: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+  }> = [];
+  // Light system prompt
+  convo.push({
+    role: "system",
+    content: `You are a contracts analyst for U.S. government solicitations.
+  Your job: analyze VAR and small business set-aside opportunities, and draft outputs grounded in the provided solicitation text.
+  Rules:
+  - Always use actual details from context (POC names, emails, solicitation numbers, dates, requirements).
+  - Do not generate placeholders like [POC Name] unless the information is genuinely missing.
+  - If information is missing, say so in one short sentence before providing the draft.
+  - Drafts must be professional, concise, and directly usable.`,
+  });
+
+  // Latest analysis summary if available
+  const latestAnalysis = await db.getAIAnalysis(params.contractId);
+  if (latestAnalysis?.summary) {
+    const v = (latestAnalysis as any)?.version;
+    convo.push({
+      role: "system",
+      content: `Latest analysis summary${v ? ` (v${v})` : ""}:\n${
+        latestAnalysis.summary
+      }`,
+    });
+    // Provide full analysis JSON for precise data (score, flags, action plan, etc.)
+    try {
+      const json = JSON.stringify(latestAnalysis);
+      convo.push({
+        role: "system",
+        content: `Latest analysis: ${json}`,
+      });
+    } catch {}
+  }
+
+  // Document context listing from per-contract tmp dir
+  try {
+    const uploadDir = path.join(
+      __dirname,
+      "uploads",
+      "tmp",
+      "contract-analysis",
+      params.contractId
+    );
+    const files = await fs.readdir(uploadDir);
+    if (files && files.length > 0) {
+      convo.push({
+        role: "system",
+        content: `Available sources: ${files.join(
+          ", "
+        )}. Use the file explicitly named by the user.`,
+      });
+    }
+  } catch {}
+
+  // Conversation history (most recent first from DB, capped at 50)
+  try {
+    const history = await db.getChatMessages(params.sessionId, 50);
+    for (const message of history) {
+      // Trust DB roles and contents as-is
+      const role = message.role as "system" | "user" | "assistant";
+      convo.push({ role, content: message.content });
+    }
+  } catch {}
+
+  // If the latest history doesn't already include this exact user message, append it
+  try {
+    const last = convo[convo.length - 1];
+    if (
+      !(last && last.role === "user" && last.content === params.userMessage)
+    ) {
+      convo.push({ role: "user", content: params.userMessage });
+    }
+  } catch {}
+  return convo;
+}
+
+// Ingest solicitation docs from existing attachments for a contract
+export const ingestSolicitation =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { solicitationId } = req.params as { solicitationId?: string };
+      const { contractId } = (req.body || {}) as { contractId?: string };
+      if (!solicitationId || !contractId) {
+        return res
+          .status(400)
+          .json({ error: "solicitationId and contractId required" });
+      }
+      // Prepare per-contract tmp directory and download attachments there
+      const contract = await db.getContract(contractId);
+      if (!contract)
+        return res.status(404).json({ error: "Contract not found" });
+      const uploadDir = path.join(
+        __dirname,
+        "uploads",
+        "tmp",
+        "contract-analysis",
+        contractId
+      );
+      await fs.mkdir(uploadDir, { recursive: true });
+      let countBefore = 0;
+      try {
+        countBefore = (await fs.readdir(uploadDir)).length;
+      } catch {}
+      if (contract.attachments && contract.attachments.length > 0) {
+        try {
+          await downloadAttachments(contract.attachments, uploadDir);
+        } catch (e) {
+          console.warn("Prepare Chat download failed", e);
+        }
+      }
+      let countAfter = countBefore;
+      try {
+        countAfter = (await fs.readdir(uploadDir)).length;
+      } catch {}
+      return res.json({
+        ok: true,
+        ingested: Math.max(0, countAfter - countBefore),
+      });
+    } catch (e: any) {
+      console.error("Ingest failed", e);
+      return res.status(500).json({ error: e.message });
+    }
+  };
+
+function exists(p: string): Promise<boolean> {
+  return fs
+    .access(p)
+    .then(() => true)
+    .catch(() => false);
+}
+
+export const solicitationStatus =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { solicitationId } = req.params as { solicitationId?: string };
+      if (!solicitationId)
+        return res.status(400).json({ error: "solicitationId required" });
+      // Map solicitationId -> contract by solicitationNumber, then inspect tmp dir
+      const contracts = await db.getContracts(1000);
+      const match = contracts.find(
+        (c: any) => (c.solicitationNumber || "").trim() === solicitationId
+      );
+      if (!match) return res.json({ count: 0, docs: [] });
+      const uploadDir = path.join(
+        __dirname,
+        "uploads",
+        "tmp",
+        "contract-analysis",
+        match.id
+      );
+      try {
+        const files = await fs.readdir(uploadDir);
+        res.json({ count: files.length, docs: files });
+      } catch {
+        res.json({ count: 0, docs: [] });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+
+// Streaming chat (NDJSON) with phases
+export const streamChatMessage =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      const { contractId, message, model, solicitationId } = req.body || {};
+      if (!sessionId || !contractId || !message) {
+        res
+          .status(400)
+          .json({ error: "sessionId, contractId and message are required" });
+        return;
+      }
+      const session = await db.getChatSession(sessionId);
+      if (!session || session.contractId !== contractId) {
+        res.status(404).json({ error: "Chat session not found" });
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const writeEvent = (obj: any) => {
+        try {
+          res.write(JSON.stringify(obj) + "\n");
+        } catch (_) {}
+      };
+
+      // queued phase
+      writeEvent({ type: "status", phase: "queued" });
+
+      await db.addChatMessage(sessionId, contractId, "user", message);
+
+      // thinking phase
+      writeEvent({ type: "status", phase: "thinking" });
+
+      // Ensure per-contract tmp documents exist similar to analysis
+      try {
+        const contract = await db.getContract(contractId);
+        if (contract) {
+          const uploadDir = path.join(
+            __dirname,
+            "uploads",
+            "tmp",
+            "contract-analysis",
+            contractId
+          );
+          try {
+            await fs.mkdir(uploadDir, { recursive: true });
+          } catch {}
+          if (contract.attachments && contract.attachments.length > 0) {
+            try {
+              await downloadAttachments(contract.attachments, uploadDir);
+            } catch (e) {
+              console.warn("Chat attachment ensure failed", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Chat doc ensure flow failed", e);
+      }
+
+      // Build multimodal contents (contract+docs) + conversation
+      const contract = await db.getContract(contractId);
+      const uploadDir = path.join(
+        __dirname,
+        "uploads",
+        "tmp",
+        "contract-analysis",
+        contractId
+      );
+      let filePaths: string[] = [];
+      try {
+        const files = await fs.readdir(uploadDir);
+        filePaths = files.map((f) => path.join(uploadDir, f));
+      } catch {}
+
+      const contextParts = await buildChatContextParts(
+        contract || {},
+        filePaths
+      );
+      const history = await db.getChatMessages(sessionId, 50);
+      const convoContents = history.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+      const contents = [
+        { role: "user", parts: contextParts },
+        ...convoContents,
+        { role: "user", parts: [{ text: message }] },
+      ];
+
+      const modelName: GeminiChatModel =
+        (model as GeminiChatModel) || "2.0-flash";
+      const startTime = Date.now();
+
+      const full = await sendGeminiContents(
+        contents,
+        process.env.GEMINI_API_KEY || "",
+        modelName
+      );
+      const endTime = Date.now();
+
+      console.log("full", full);
+
+      // responding phase
+      writeEvent({ type: "status", phase: "responding" });
+
+      // Split into small tokens (roughly words with spaces preserved)
+      const tokens = full.split(/(\s+)/).filter((t) => t.length > 0);
+      let sent = 0;
+      for (const t of tokens) {
+        writeEvent({ type: "token", data: t });
+        sent += t.length;
+        // Throttle so the client can animate; ~25–40 tokens/sec
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 25));
+      }
+
+      // Persist assistant message with internal metadata
+      await db.addChatMessage(sessionId, contractId, "assistant", full, {
+        model: modelName,
+        // We don't have exact token counts from LLM here; approximate with token length
+        inputTokens: Math.ceil(message.length / 4),
+        outputTokens: Math.ceil(full.length / 4),
+        durationMs: endTime - startTime,
+      });
+      writeEvent({ type: "done" });
+      res.end();
+    } catch (error: any) {
+      try {
+        res.write(
+          JSON.stringify({
+            type: "error",
+            error: error.message || String(error),
+          }) + "\n"
+        );
+      } catch {}
+      res.end();
+    }
+  };
+
+// Continue a previous assistant message by streaming additional tokens and appending to the message
+export const continueChatMessage =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      const { contractId, messageId, model, solicitationId } = req.body || {};
+      if (!sessionId || !contractId || !messageId) {
+        res
+          .status(400)
+          .json({ error: "sessionId, contractId and messageId are required" });
+        return;
+      }
+
+      const session = await db.getChatSession(sessionId);
+      if (!session || session.contractId !== contractId) {
+        res.status(404).json({ error: "Chat session not found" });
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const writeEvent = (obj: any) => {
+        try {
+          res.write(JSON.stringify(obj) + "\n");
+        } catch (_) {}
+      };
+
+      // queued
+      writeEvent({ type: "status", phase: "queued" });
+
+      // Validate that messageId points to an assistant message in this session/contract
+      try {
+        const msg = await db.getChatMessageById(messageId);
+        if (
+          !msg ||
+          msg.sessionId !== sessionId ||
+          msg.contractId !== contractId ||
+          msg.role !== "assistant"
+        ) {
+          writeEvent({
+            type: "error",
+            error:
+              "Invalid continuation target. Only the last assistant message can be continued.",
+          });
+          res.end();
+          return;
+        }
+      } catch (e) {
+        writeEvent({
+          type: "error",
+          error: "Unable to validate continuation target.",
+        });
+        res.end();
+        return;
+      }
+
+      // Build multimodal contents (contract+docs) + conversation and continue instruction
+      const contract = await db.getContract(contractId);
+      const uploadDir = path.join(
+        __dirname,
+        "uploads",
+        "tmp",
+        "contract-analysis",
+        contractId
+      );
+      let filePaths: string[] = [];
+      try {
+        const files = await fs.readdir(uploadDir);
+        filePaths = files.map((f) => path.join(uploadDir, f));
+      } catch {}
+
+      const contextParts = await buildChatContextParts(
+        contract || {},
+        filePaths
+      );
+      const history = await db.getChatMessages(sessionId, 50);
+      const convoContents = history.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+      // Add a short user instruction to continue the previous assistant message
+      const continueInstruction =
+        "Continue the previous assistant response where it left off. Do not repeat earlier content.";
+
+      const modelName: GeminiChatModel =
+        (model as GeminiChatModel) || "2.0-flash";
+      const startTime = Date.now();
+      const contents = [
+        { role: "user", parts: contextParts },
+        ...convoContents,
+        { role: "user", parts: [{ text: continueInstruction }] },
+      ];
+
+      const full = await sendGeminiContents(
+        contents,
+        process.env.GEMINI_API_KEY || "",
+        modelName
+      );
+      const endTime = Date.now();
+
+      writeEvent({ type: "status", phase: "responding" });
+
+      // Stream tokens
+      const tokens = full.split(/(\s+)/).filter((t) => t.length > 0);
+      let accumulated = "";
+      for (const t of tokens) {
+        writeEvent({ type: "token", data: t });
+        accumulated += t;
+        // throttle
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 25));
+      }
+
+      // Append full continuation to the original assistant message in DB
+      try {
+        await db.appendChatMessageContent(messageId, accumulated, {
+          model: modelName,
+          outputTokens: Math.ceil(accumulated.length / 4),
+          durationMs: Math.max(1, endTime - startTime),
+        });
+      } catch (e) {
+        console.error("Failed to append chat message content:", e);
+      }
+
+      writeEvent({ type: "done" });
+      res.end();
+    } catch (error: any) {
+      try {
+        res.write(
+          JSON.stringify({
+            type: "error",
+            error: error.message || String(error),
+          }) + "\n"
+        );
+      } catch (_) {}
+      res.end();
+    }
+  };
+
+// Feedback endpoint for chat messages
+export const setChatMessageFeedback =
+  (db: DatabaseService) => async (req: Request, res: Response) => {
+    try {
+      const { messageId } = req.params as { messageId?: string };
+      const { value } = (req.body || {}) as { value?: number };
+      if (!messageId || (value !== 1 && value !== -1 && value !== 0)) {
+        return res
+          .status(400)
+          .json({ error: "messageId and value (1|-1|0) are required" });
+      }
+      await db.setChatMessageFeedback(messageId, value);
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("Feedback save failed", e);
+      return res.status(500).json({ error: e.message });
+    }
+  };
 // Search endpoints
 
 export const searchFromUrl =

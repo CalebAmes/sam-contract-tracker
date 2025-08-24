@@ -7,7 +7,6 @@ import {
   Clock,
   FileText,
   Upload,
-  Loader2,
   FileCheck,
   AlertTriangle,
 } from "lucide-react";
@@ -15,6 +14,7 @@ import { Contract, AnalysisStatus, GeminiModel } from "../types";
 import DocumentUpload from "./DocumentUpload";
 import ModelSelectionCard from "./ModelSelectionCard";
 import { API_CONFIG } from "../config/api";
+import { Button } from "./ui/button";
 
 interface UploadedFile {
   id: string;
@@ -46,18 +46,15 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   );
   const [analysisStep, setAnalysisStep] = useState("");
   const [showResults, setShowResults] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
-    {}
-  );
-  const [error, setError] = useState<string | null>(null);
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const startTime = useRef<number>(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [documentCount, setDocumentCount] = useState(0);
-  const [processedDocuments, setProcessedDocuments] = useState(0);
   const [bypassAttachments, setBypassAttachments] = useState(false);
   const [selectedModel, setSelectedModel] = useState<GeminiModel>("2.0-flash");
+  const [ctxCount, setCtxCount] = useState<number | null>(null);
+  const [ctxChecking, setCtxChecking] = useState(false);
+  const [prepareBusy, setPrepareBusy] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -66,17 +63,40 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
       setAnalysisStatus(contract.analysisStatus || AnalysisStatus.PENDING);
       setAnalysisStep("");
       setShowResults(false);
-      setError(null);
-      setUploadProgress({});
       setElapsedTime(0);
       startTime.current = 0;
       setProgress(0);
-      setDocumentCount(0);
-      setProcessedDocuments(0);
       setBypassAttachments(false);
       setSelectedModel("2.0-flash");
+      // Check long-term cache for solicitation documents
+      const sid = contract.solicitationNumber;
+      if (sid) {
+        let mounted = true;
+        (async () => {
+          try {
+            setCtxChecking(true);
+            const r = await fetch(API_CONFIG.endpoints.solicitationStatus(sid));
+            if (!mounted) return;
+            if (r.ok) {
+              const data = await r.json();
+              setCtxCount(typeof data.count === "number" ? data.count : 0);
+            } else {
+              setCtxCount(null);
+            }
+          } catch {
+            setCtxCount(null);
+          } finally {
+            if (mounted) setCtxChecking(false);
+          }
+        })();
+        return () => {
+          mounted = false;
+        };
+      } else {
+        setCtxCount(null);
+      }
     }
-  }, [isOpen, contract.analysisStatus]);
+  }, [isOpen, contract.analysisStatus, contract.solicitationNumber]);
 
   useEffect(() => {
     // Update elapsed time during analysis
@@ -100,35 +120,29 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
   const handleRemoveFile = (fileId: string) => {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
-    setUploadProgress((prev) => {
-      const newProgress = { ...prev };
-      delete newProgress[fileId];
-      return newProgress;
-    });
   };
 
   const hasValidDocuments = () => {
-    if (bypassAttachments) {
-      return uploadedFiles.some((f) => f.status === "success");
-    }
-    return (
-      contract.attachments.length > 0 ||
-      uploadedFiles.some((f) => f.status === "success")
-    );
+    // Allow analysis when any of these are true:
+    // - User uploaded files (when bypass is on or off)
+    // - Contract has attachments (non-bypass path)
+    // - Long-term cache has prepared documents for this solicitation
+    return true;
+    // const uploadedOk = uploadedFiles.some((f) => f.status === "success");
+    // const attachmentsOk = !bypassAttachments && contract.attachments.length > 0;
+    // const cacheOk = (ctxCount ?? 0) > 0;
+    // return uploadedOk || attachmentsOk || cacheOk;
   };
 
   const pollAnalysisStatus = async () => {
     try {
-      // Fetch contract status
       const contractResponse = await fetch(
         `${API_CONFIG.baseUrl}/api/contracts/${contract.id}`
       );
       if (!contractResponse.ok) throw new Error("Failed to fetch status");
-
       const contractData = await contractResponse.json();
       const updatedContract = contractData.contract;
 
-      // Fetch progress data
       const progressResponse = await fetch(
         `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/analysis-progress`
       );
@@ -153,9 +167,6 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
       } else if (updatedContract.analysisStatus === AnalysisStatus.FAILED) {
         setAnalysisStatus(AnalysisStatus.FAILED);
         setAnalysisStep("Analysis failed");
-        setError(
-          "The analysis process encountered an error. Please try again."
-        );
         if (pollingInterval.current) {
           clearInterval(pollingInterval.current);
           pollingInterval.current = null;
@@ -167,24 +178,18 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   };
 
   const startAnalysis = async () => {
-    if (!hasValidDocuments()) {
-      return;
-    }
+    if (!hasValidDocuments()) return;
 
     setAnalysisStatus(AnalysisStatus.IN_PROGRESS);
     setAnalysisStep("Preparing documents for analysis...");
-    setError(null);
     startTime.current = Date.now();
 
     try {
-      // Start the analysis process
       const response = await fetch(
         `${API_CONFIG.baseUrl}/api/contracts/${contract.id}/analyze`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             uploadedFiles: uploadedFiles
               .filter((f) => f.status === "success")
@@ -195,19 +200,12 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.status}`);
-      }
-
-      // Start polling for real status updates
+      if (!response.ok) throw new Error(`Analysis failed: ${response.status}`);
       pollingInterval.current = setInterval(pollAnalysisStatus, 1000);
     } catch (error) {
       console.error("Analysis error:", error);
       setAnalysisStatus(AnalysisStatus.FAILED);
       setAnalysisStep("Failed to start analysis");
-      setError(
-        error instanceof Error ? error.message : "An unexpected error occurred"
-      );
     }
   };
 
@@ -314,12 +312,14 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
           </div>
 
           <div className="flex justify-end">
-            <button
+            <Button
               onClick={onClose}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              variant="ai"
+              size="sm"
+              className="px-4 py-2"
             >
               View Results
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -334,7 +334,7 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
             </div>
             <h3 className="text-lg font-semibold mb-2">Analysis Failed</h3>
             <p className="text-muted-foreground">
-              {error || "An unexpected error occurred during analysis."}
+              The analysis process encountered an error. Please try again.
             </p>
           </div>
 
@@ -347,17 +347,18 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
           </div>
 
           <div className="flex justify-center">
-            <button
+            <Button
               onClick={() => {
                 setAnalysisStatus(AnalysisStatus.PENDING);
                 setAnalysisStep("");
-                setError(null);
                 setElapsedTime(0);
               }}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              variant="ai"
+              size="sm"
+              className="px-4 py-2"
             >
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -366,6 +367,75 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
     // Default: Document upload and analysis setup
     return (
       <div className="space-y-6">
+        {/* Cache status and preparation */}
+        {contract.solicitationNumber && (
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span
+                className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border ${
+                  (ctxCount ?? 0) > 0
+                    ? "border-green-500/30 text-green-300 bg-green-500/10"
+                    : "border-yellow-500/30 text-yellow-300 bg-yellow-500/10"
+                }`}
+              >
+                {ctxChecking
+                  ? "Checking…"
+                  : (ctxCount ?? 0) > 0
+                  ? "Saved & processed"
+                  : "Not prepared"}
+              </span>
+              <span className="text-muted-foreground">
+                Solicitation: {contract.solicitationNumber}
+              </span>
+            </div>
+            {(ctxCount ?? 0) === 0 && (
+              <Button
+                onClick={async () => {
+                  try {
+                    setPrepareBusy(true);
+                    await fetch(
+                      API_CONFIG.endpoints.solicitationIngest(
+                        contract.solicitationNumber || ""
+                      ),
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ contractId: contract.id }),
+                      }
+                    );
+                  } catch (e) {
+                    console.error("Prepare documents failed", e);
+                  } finally {
+                    setPrepareBusy(false);
+                    // re-check status
+                    try {
+                      setCtxChecking(true);
+                      const r = await fetch(
+                        API_CONFIG.endpoints.solicitationStatus(
+                          contract.solicitationNumber || ""
+                        )
+                      );
+                      if (r.ok) {
+                        const data = await r.json();
+                        setCtxCount(
+                          typeof data.count === "number" ? data.count : 0
+                        );
+                      }
+                    } catch {}
+                    setCtxChecking(false);
+                  }
+                }}
+                variant="ai"
+                size="sm"
+                className="px-3"
+                disabled={prepareBusy}
+              >
+                {prepareBusy ? "Preparing…" : "Prepare Documents"}
+              </Button>
+            )}
+          </div>
+        )}
+
         <div>
           <h3 className="text-lg font-semibold mb-2">AI Contract Analysis</h3>
           <p className="text-muted-foreground mb-4">
@@ -498,18 +568,17 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
               </span>
             )}
           </div>
-          <button
+          <Button
             onClick={startAnalysis}
-            disabled={
-              !hasValidDocuments() ||
-              // @ts-ignore
-              analysisStatus === AnalysisStatus.IN_PROGRESS
-            }
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            // disabled={
+            //   !hasValidDocuments() || analysisStatus !== AnalysisStatus.PENDING
+            // }
+            variant="ai"
+            className="px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Brain className="w-4 h-4" />
             Start AI Analysis
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -527,12 +596,12 @@ const AnalysisModal: React.FC<AnalysisModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-card rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
+        <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+            <div className="p-2 bg-blue-100/40 dark:bg-blue-900/30 rounded-lg">
               <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>

@@ -36,3 +36,71 @@
     transform: rotate(360deg);
   }
 }
+
+/* Shimmer animation for loading text */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.animate-shimmer {
+  animation: shimmer 1s linear infinite;
+  will-change: background-position;
+}
+
+/* Glowing pulse for high-visibility status */
+@keyframes glowPulse {
+  0% {
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.3),
+      0 0 4px rgba(59, 130, 246, 0.25);
+    filter: drop-shadow(0 0 0.15rem rgba(59, 130, 246, 0.25));
+  }
+  50% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.6),
+      0 0 18px rgba(99, 102, 241, 0.45);
+    filter: drop-shadow(0 0 0.35rem rgba(99, 102, 241, 0.45));
+  }
+  100% {
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.3),
+      0 0 4px rgba(59, 130, 246, 0.25);
+    filter: drop-shadow(0 0 0.15rem rgba(59, 130, 246, 0.25));
+  }
+}
+.animate-glow {
+  animation: glowPulse 1.2s ease-in-out infinite;
+}
+
+/* Combined shimmer + glow to avoid animation property overrides */
+.animate-shimmer-glow {
+  animation: shimmer 1s linear infinite, glowPulse 1.2s ease-in-out infinite;
+  will-change: background-position, filter, text-shadow;
+}
+
+/* Global background gradient for app shell */
+:root {
+  --bg-navy: #0b1220;
+  --bg-blue-glow: rgba(37, 99, 235, 0.16);
+  --bg-red-glow: rgba(220, 38, 38, 0.14);
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background: radial-gradient(
+      1200px 600px at 10% -10%,
+      var(--bg-blue-glow),
+      transparent 50%
+    ),
+    radial-gradient(
+      1200px 600px at 110% 0%,
+      var(--bg-red-glow),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--bg-navy), #0a0f1d);
+  background-attachment: fixed;
+}

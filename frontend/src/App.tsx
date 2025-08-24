@@ -6,8 +6,7 @@ import {
   Link,
   useLocation,
 } from "react-router-dom";
-import { BarChart3, FileText, Search, Brain, Menu, X } from "lucide-react";
-import ThemeToggle from "./components/ThemeToggle";
+import { BarChart3, FileText, Search, Brain, Menu } from "lucide-react";
 import LoadingScreen from "./components/LoadingScreen";
 import Dashboard from "./pages/Dashboard";
 import Contracts from "./pages/Contracts";
@@ -18,13 +17,11 @@ import Analyze from "./pages/Analyze";
 function Navigation() {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    // Load collapsed state from localStorage
     const saved = localStorage.getItem("navCollapsed");
     return saved === "true";
   });
 
   useEffect(() => {
-    // Save collapsed state to localStorage
     localStorage.setItem("navCollapsed", isCollapsed.toString());
   }, [isCollapsed]);
 
@@ -135,6 +132,13 @@ function App() {
     setIsLoading(false);
   };
 
+  useEffect(() => {
+    try {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } catch {}
+  }, []);
+
   return (
     <Router>
       <div className="min-h-screen bg-background text-foreground transition-colors">
@@ -142,16 +146,15 @@ function App() {
 
         <header className="bg-card shadow-sm border-b border-border">
           <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h1 className="text-xl font-bold font-heading text-card-foreground">
-                  SAM Contract Tracker
-                </h1>
-                <span className="text-sm text-muted-foreground">
-                  Government Contract Analysis Platform
-                </span>
-              </div>
-              <ThemeToggle />
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo.png"
+                alt="SAM Tracker"
+                className="w-8 h-8 rounded"
+              />
+              <h1 className="text-xl font-bold text-card-foreground">
+                SAM Tracker
+              </h1>
             </div>
           </div>
         </header>
@@ -159,8 +162,8 @@ function App() {
         <div className="flex h-[calc(100vh-73px)]">
           <Navigation />
 
-          <main className="flex-1 overflow-auto">
-            <div className="p-6">
+          <main className="flex-1 min-h-0">
+            <div className="h-full min-h-0 p-6">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/contracts" element={<Contracts />} />

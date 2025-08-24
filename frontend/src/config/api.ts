@@ -35,6 +35,24 @@ export const API_CONFIG = {
     // Contract management
     contracts: `${API_BASE_URL}/api/contracts`,
     contract: (id: string) => `${API_BASE_URL}/api/contracts/${id}`,
+    // Chat endpoints
+    createChatSession: `${API_BASE_URL}/api/chat/sessions`,
+    listChatSessions: (contractId: string) =>
+      `${API_BASE_URL}/api/chat/sessions/${contractId}`,
+    getChatMessages: (sessionId: string) =>
+      `${API_BASE_URL}/api/chat/messages/${sessionId}`,
+    sendChatMessage: (sessionId: string) =>
+      `${API_BASE_URL}/api/chat/messages/${sessionId}`,
+    streamChat: (sessionId: string) =>
+      `${API_BASE_URL}/api/chat/stream/${sessionId}`,
+    streamChatContinue: (sessionId: string) =>
+      `${API_BASE_URL}/api/chat/continue/${sessionId}`,
+    chatFeedback: (messageId: string) =>
+      `${API_BASE_URL}/api/chat/messages/${messageId}/feedback`,
+    solicitationStatus: (solicitationId: string) =>
+      `${API_BASE_URL}/api/solicitations/${solicitationId}/status`,
+    solicitationIngest: (solicitationId: string) =>
+      `${API_BASE_URL}/api/solicitations/${solicitationId}/ingest`,
   },
 };
 
