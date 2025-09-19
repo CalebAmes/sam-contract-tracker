@@ -15,8 +15,8 @@ export function createScoringRouter(): Router {
   const router = Router();
 
   router.get("/scorecards", async (_req, res) => {
-    const scorecards = await SDRScoringRepository.listScorecards();
-    res.json({ data: scorecards });
+    const entities = await SDRScoringRepository.listEntities();
+    res.json({ data: entities });
   });
 
   router.get("/metrics", async (_req, res) => {
@@ -24,18 +24,14 @@ export function createScoringRouter(): Router {
     res.json({ data: metrics });
   });
 
-  router.post("/scorecards", (req, res) => {
-    const parsed = submitScoreSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+  router.delete("/entities", async (_req, res) => {
+    await SDRScoringRepository.clearAllEntities();
+    res.status(200).json({ message: "All scoring entities removed." });
+  });
 
-    console.warn(
-      "[scoring] submission received but persistence not implemented"
-    );
-    res.status(202).json({
-      message: "Scorecard submission accepted. Persistence pending.",
-      data: parsed.data,
+  router.post("/scorecards", (_req, res) => {
+    res.status(501).json({
+      error: "Scorecard submissions are not yet enabled in the SDR skeleton.",
     });
   });
 

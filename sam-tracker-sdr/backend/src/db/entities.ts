@@ -1,12 +1,13 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   SDRIntakeOpportunity,
   SDRIntakeNote,
   SDRScoreMetricDefinition,
   SDRScorecard,
+  SDRScoringEntity,
 } from "./schema";
+import { sdrDb } from "./sqlite";
 
-const intakeOpportunities: SDRIntakeOpportunity[] = [];
-const intakeNotes: SDRIntakeNote[] = [];
 const scoringMetrics: SDRScoreMetricDefinition[] = [
   {
     id: "tech-fit",
@@ -24,19 +25,287 @@ const scoringMetrics: SDRScoreMetricDefinition[] = [
     description: "How competitive we are compared to the incumbent landscape.",
   },
 ];
+
+const intakeNotes: SDRIntakeNote[] = [];
 const scorecards: SDRScorecard[] = [];
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+async function findOrCreateEntity(
+  opportunity: SDRIntakeOpportunity
+): Promise<string | undefined> {
+  const rawName = opportunity.awardeeName?.trim();
+  const rawUei = opportunity.awardeeUei?.trim();
+
+  if (!rawName && !rawUei) {
+    return undefined;
+  }
+
+  const entityName = rawName && rawName.length > 0 ? rawName : "Unknown";
+  const uei = rawUei && rawUei.length > 0 ? rawUei : null;
+  const primaryNaics = opportunity.naics || "Unknown";
+  const latestModified = opportunity.modifiedDate ?? null;
+  const now = new Date().toISOString();
+
+  let existing: { id: string } | undefined;
+  if (uei) {
+    existing = await sdrDb.get<{ id: string }>(
+      `SELECT id FROM sdr_entities WHERE uei = ? LIMIT 1`,
+      [uei]
+    );
+  }
+  if (!existing) {
+    existing = await sdrDb.get<{ id: string }>(
+      `SELECT id FROM sdr_entities WHERE LOWER(entity_name) = LOWER(?) LIMIT 1`,
+      [entityName]
+    );
+  }
+
+  if (existing?.id) {
+    await sdrDb.run(
+      `UPDATE sdr_entities
+       SET primary_naics = COALESCE(?, primary_naics),
+           latest_modified_date = COALESCE(?, latest_modified_date),
+           uei = CASE WHEN (uei IS NULL OR uei = '') THEN COALESCE(?, uei) ELSE uei END,
+           stale = 1,
+           updated_at = ?
+       WHERE id = ?`,
+      [primaryNaics, latestModified, uei, now, existing.id]
+    );
+    return existing.id;
+  }
+
+  const id = uuidv4();
+  await sdrDb.run(
+    `INSERT INTO sdr_entities (
+       id,
+       entity_name,
+       uei,
+       primary_naics,
+       latest_modified_date,
+       awards_last_year,
+       stale,
+       status,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      entityName,
+      uei,
+      primaryNaics,
+      latestModified,
+      0,
+      1,
+      "pending",
+      now,
+      now,
+    ]
+  );
+
+  return id;
+}
+
+async function upsertAward(opportunity: SDRIntakeOpportunity, entityId?: string) {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `INSERT INTO sdr_awards (
+       id,
+       solicitation_number,
+       title,
+       agency,
+       naics,
+       modified_date,
+       award_date,
+       publish_date,
+       contract_type,
+       awardee_name,
+       awardee_uei,
+       awarding_office,
+       value,
+       entity_id,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       solicitation_number = excluded.solicitation_number,
+       title = excluded.title,
+       agency = excluded.agency,
+       naics = excluded.naics,
+       modified_date = excluded.modified_date,
+       award_date = excluded.award_date,
+       publish_date = excluded.publish_date,
+       contract_type = excluded.contract_type,
+       awardee_name = excluded.awardee_name,
+       awardee_uei = excluded.awardee_uei,
+       awarding_office = excluded.awarding_office,
+       value = excluded.value,
+       entity_id = excluded.entity_id,
+       updated_at = excluded.updated_at
+    `,
+    [
+      opportunity.id,
+      opportunity.solicitationNumber,
+      opportunity.title,
+      opportunity.agency,
+      opportunity.naics,
+      opportunity.modifiedDate ?? null,
+      opportunity.awardDate ?? null,
+      opportunity.postedDate ?? null,
+      opportunity.contractType ?? null,
+      opportunity.awardeeName ?? null,
+      opportunity.awardeeUei ?? null,
+      opportunity.awardingOffice ?? null,
+      opportunity.value ?? null,
+      entityId ?? null,
+      now,
+      now,
+    ]
+  );
+
+  if (entityId) {
+    await sdrDb.run(
+      `INSERT OR IGNORE INTO sdr_entity_awards (entity_id, award_id) VALUES (?, ?)`,
+      [entityId, opportunity.id]
+    );
+  }
+}
+
+async function refreshEntityStats(entityId: string) {
+  const nowIso = new Date().toISOString();
+  const cutoffIso = new Date(Date.now() - ONE_YEAR_MS).toISOString();
+
+  const aggregates = await sdrDb.get<{
+    latestModified?: string;
+    totalAwards?: number;
+  }>(
+    `SELECT
+       MAX(modified_date) AS latestModified,
+       COUNT(*) AS totalAwards
+     FROM sdr_awards
+     WHERE entity_id = ?`,
+    [entityId]
+  );
+
+  const awardsLastYearRow = await sdrDb.get<{ count?: number }>(
+    `SELECT COUNT(*) AS count
+     FROM sdr_awards
+     WHERE entity_id = ? AND modified_date >= ?`,
+    [entityId, cutoffIso]
+  );
+
+  const awardsLastYear = awardsLastYearRow?.count ?? 0;
+
+  await sdrDb.run(
+    `UPDATE sdr_entities
+     SET latest_modified_date = ?,
+         awards_last_year = ?,
+         updated_at = ?
+     WHERE id = ?`,
+    [
+      aggregates?.latestModified ?? null,
+      awardsLastYear,
+      nowIso,
+      entityId,
+    ]
+  );
+}
+
+function mapAwardRow(row: any): SDRIntakeOpportunity {
+  return {
+    id: row.id,
+    solicitationNumber: row.solicitation_number ?? "",
+    title: row.title ?? "Untitled Award",
+    agency: row.agency ?? "Unknown",
+    naics: row.naics ?? "Unknown",
+    postedDate: row.publish_date ?? undefined,
+    awardDate: row.award_date ?? undefined,
+    modifiedDate: row.modified_date ?? undefined,
+    status: "new",
+    contractType: row.contract_type ?? undefined,
+    awardeeName: row.awardee_name ?? undefined,
+    awardeeUei: row.awardee_uei ?? undefined,
+    awardingOffice: row.awarding_office ?? undefined,
+    value: row.value ?? undefined,
+  };
+}
+
+function mapEntityRow(row: any): SDRScoringEntity {
+  const statusValue = typeof row.status === "string" ? row.status : "pending";
+  const allowedStatuses: SDRScoringEntity["status"][] = [
+    "pending",
+    "ready",
+    "queued",
+  ];
+  const normalizedStatus = (allowedStatuses.includes(statusValue as any)
+    ? (statusValue as SDRScoringEntity["status"])
+    : "pending");
+
+  return {
+    id: row.id,
+    entityName: row.entity_name,
+    uei: row.uei ?? "",
+    primaryNaics: row.primary_naics ?? "Unknown",
+    recentAwardDate: row.latest_modified_date ?? "",
+    awardsLastYear: Number(row.awards_last_year ?? 0),
+    contactEmail: row.contact_email ?? undefined,
+    contactPhone: row.contact_phone ?? undefined,
+    website: row.website ?? undefined,
+    status: normalizedStatus,
+    stale: Boolean(row.stale),
+  };
+}
 
 export const SDRIntakeRepository = {
   async list(): Promise<SDRIntakeOpportunity[]> {
-    return intakeOpportunities;
+    const rows = await sdrDb.all(`
+      SELECT *
+      FROM sdr_awards
+      ORDER BY datetime(COALESCE(modified_date, created_at)) DESC
+    `);
+    return rows.map(mapAwardRow);
   },
 
   async getById(id: string): Promise<SDRIntakeOpportunity | undefined> {
-    return intakeOpportunities.find((item) => item.id === id);
+    const row = await sdrDb.get(`SELECT * FROM sdr_awards WHERE id = ?`, [id]);
+    return row ? mapAwardRow(row) : undefined;
   },
 
   async listNotes(opportunityId: string): Promise<SDRIntakeNote[]> {
     return intakeNotes.filter((note) => note.opportunityId === opportunityId);
+  },
+
+  async ingestOpportunity(opportunity: SDRIntakeOpportunity): Promise<void> {
+    const entityId = await findOrCreateEntity(opportunity);
+    await upsertAward(opportunity, entityId);
+    if (entityId) {
+      await refreshEntityStats(entityId);
+    }
+    if (entityId) {
+      await sdrDb.run(
+        `UPDATE sdr_entities SET stale = 1 WHERE id = ?`,
+        [entityId]
+      );
+    }
+  },
+
+  async existingIds(): Promise<Set<string>> {
+    const rows = await sdrDb.all<{ id: string }>(`SELECT id FROM sdr_awards`);
+    return new Set(rows.map((row) => row.id));
+  },
+
+  async clearAllAwards(): Promise<void> {
+    const now = new Date().toISOString();
+    await sdrDb.run(`DELETE FROM sdr_entity_awards`);
+    await sdrDb.run(`DELETE FROM sdr_awards`);
+    await sdrDb.run(
+      `UPDATE sdr_entities
+       SET awards_last_year = 0,
+           stale = 1,
+           latest_modified_date = NULL,
+           updated_at = ?`,
+      [now]
+    );
   },
 };
 
@@ -47,5 +316,21 @@ export const SDRScoringRepository = {
 
   async listMetricDefinitions(): Promise<SDRScoreMetricDefinition[]> {
     return scoringMetrics;
+  },
+
+  async listEntities(): Promise<SDRScoringEntity[]> {
+    const rows = await sdrDb.all(`
+      SELECT *
+      FROM sdr_entities
+      ORDER BY stale DESC, datetime(COALESCE(latest_modified_date, updated_at)) DESC
+      LIMIT 500
+    `);
+    return rows.map(mapEntityRow);
+  },
+
+  async clearAllEntities(): Promise<void> {
+    await sdrDb.run(`DELETE FROM sdr_entity_awards`);
+    await sdrDb.run(`UPDATE sdr_awards SET entity_id = NULL`);
+    await sdrDb.run(`DELETE FROM sdr_entities`);
   },
 };

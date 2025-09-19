@@ -12,6 +12,21 @@ export async function fetchIntakeOpportunities() {
   return data?.data ?? [];
 }
 
+export async function triggerIntakeFetch() {
+  const { data } = await apiClient.post("/intake/fetch");
+  return data;
+}
+
+export async function triggerIntakeFetchLatest() {
+  const { data } = await apiClient.post("/intake/fetch/latest");
+  return data;
+}
+
+export async function deleteAllIntakeAwards() {
+  const { data } = await apiClient.delete("/intake");
+  return data;
+}
+
 export async function fetchScoringSummary() {
   const { data } = await apiClient.get("/scoring/scorecards");
   return data?.data ?? [];
@@ -20,4 +35,9 @@ export async function fetchScoringSummary() {
 export async function fetchScoringColumns() {
   const { data } = await apiClient.get("/scoring/metrics");
   return data?.data ?? [];
+}
+
+export async function deleteAllScoringEntities() {
+  const { data } = await apiClient.delete("/scoring/entities");
+  return data;
 }

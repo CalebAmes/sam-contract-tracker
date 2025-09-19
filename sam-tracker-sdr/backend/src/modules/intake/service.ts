@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { SDRIntakeRepository } from "../../db/entities";
 import { getIntakeDetail } from "../../db/entityDetails";
+import { fetchRecentAwards } from "../../services/intakeFetcher";
 
 const createOpportunitySchema = z.object({
   title: z.string(),
@@ -41,6 +42,45 @@ export function createIntakeRouter(): Router {
       message: "Request accepted. Persistence layer not implemented in skeleton.",
       data: parsed.data,
     });
+  });
+
+  router.post("/fetch", async (_req, res) => {
+    try {
+      const summary = await fetchRecentAwards();
+      console.log("[intake] /api/intake/fetch summary", summary);
+      res.status(200).json({
+        message: "SAM intake fetch completed.",
+        summary,
+      });
+    } catch (error: any) {
+      console.error("[intake] fetch failed", error);
+      res.status(500).json({
+        error: "Failed to fetch recent awards from SAM.gov",
+        details: error?.message ?? String(error),
+      });
+    }
+  });
+
+  router.post("/fetch/latest", async (_req, res) => {
+    try {
+      const summary = await fetchRecentAwards({ limit: 5 });
+      console.log("[intake] /api/intake/fetch latest summary", summary);
+      res.status(200).json({
+        message: "Fetched the latest 5 SAM awards.",
+        summary,
+      });
+    } catch (error: any) {
+      console.error("[intake] fetch latest failed", error);
+      res.status(500).json({
+        error: "Failed to fetch the latest awards from SAM.gov",
+        details: error?.message ?? String(error),
+      });
+    }
+  });
+
+  router.delete("/", async (_req, res) => {
+    await SDRIntakeRepository.clearAllAwards();
+    res.status(200).json({ message: "All intake awards removed." });
   });
 
   router.post("/:id/notes", (_req, res) => {

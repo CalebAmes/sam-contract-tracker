@@ -1,0 +1,133 @@
+import path from "path";
+import fs from "fs";
+import sqlite3 from "sqlite3";
+
+const DB_PATH = path.join(__dirname, "../../sdr-intake.db");
+
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+const sqlite = sqlite3.verbose();
+const db = new sqlite.Database(DB_PATH);
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_awards (
+      id TEXT PRIMARY KEY,
+      solicitation_number TEXT,
+      title TEXT,
+      agency TEXT,
+      naics TEXT,
+      modified_date TEXT,
+      award_date TEXT,
+      publish_date TEXT,
+      contract_type TEXT,
+      awardee_name TEXT,
+      awardee_uei TEXT,
+      awarding_office TEXT,
+      value TEXT,
+      entity_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_entities (
+      id TEXT PRIMARY KEY,
+      entity_name TEXT NOT NULL,
+      uei TEXT,
+      primary_naics TEXT,
+      latest_modified_date TEXT,
+      awards_last_year INTEGER DEFAULT 0,
+      stale INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'pending',
+      contact_email TEXT,
+      contact_phone TEXT,
+      website TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_entity_awards (
+      entity_id TEXT NOT NULL,
+      award_id TEXT NOT NULL,
+      PRIMARY KEY (entity_id, award_id),
+      FOREIGN KEY (entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE,
+      FOREIGN KEY (award_id) REFERENCES sdr_awards(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_uei ON sdr_entities(uei) WHERE uei IS NOT NULL AND uei <> ''"
+  );
+  db.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_name ON sdr_entities(entity_name)"
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_sdr_awards_modified_date ON sdr_awards(modified_date DESC)"
+  );
+
+  db.get("PRAGMA table_info(sdr_entities)", (err) => {
+    if (!err) {
+      db.all("PRAGMA table_info(sdr_entities)", (infoErr, rows) => {
+        if (!infoErr) {
+          const hasStale = rows.some((row: any) => row.name === "stale");
+          if (!hasStale) {
+            db.run(
+              "ALTER TABLE sdr_entities ADD COLUMN stale INTEGER DEFAULT 1",
+              (alterErr) => {
+                if (alterErr && !alterErr.message.includes("duplicate column")) {
+                  console.warn("[sqlite] unable to add stale column", alterErr);
+                }
+              }
+            );
+          }
+        }
+      });
+    }
+  });
+});
+
+function run(sql: string, params: any[] = []): Promise<void> {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+function get<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row as T | undefined);
+      }
+    });
+  });
+}
+
+function all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows as T[]);
+      }
+    });
+  });
+}
+
+export const sdrDb = {
+  run,
+  get,
+  all,
+};

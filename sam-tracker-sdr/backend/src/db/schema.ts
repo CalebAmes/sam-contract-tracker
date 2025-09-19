@@ -6,10 +6,16 @@ export interface SDRIntakeOpportunity {
   title: string;
   agency: string;
   naics: string;
-  postedDate: string;
+  postedDate?: string;
   responseDate?: string;
   status: SDRIntakeStatus;
   contractType?: string;
+  awardDate?: string;
+  modifiedDate?: string;
+  awardeeName?: string;
+  awardeeUei?: string;
+  awardingOffice?: string;
+  value?: string;
 }
 
 export interface SDRIntakeNote {
@@ -51,4 +57,18 @@ export interface SDRAwardRecord {
   naics: string;
   title: string;
   awardDate: string;
+}
+
+export interface SDRScoringEntity {
+  id: string;
+  entityName: string;
+  uei: string;
+  primaryNaics: string;
+  recentAwardDate: string;
+  awardsLastYear: number;
+  contactEmail?: string;
+  contactPhone?: string;
+  website?: string;
+  status: "pending" | "ready" | "queued";
+  stale: boolean;
 }
