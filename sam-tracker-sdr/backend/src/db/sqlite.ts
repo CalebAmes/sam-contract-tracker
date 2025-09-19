@@ -25,6 +25,13 @@ db.serialize(() => {
       awardee_uei TEXT,
       awarding_office TEXT,
       value TEXT,
+      award_amount TEXT,
+      set_aside TEXT,
+      place_city TEXT,
+      place_state TEXT,
+      place_country TEXT,
+      contact_name TEXT,
+      contact_email TEXT,
       entity_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -88,6 +95,46 @@ db.serialize(() => {
       });
     }
   });
+
+  db.all("PRAGMA table_info(sdr_awards)", (infoErr, rows) => {
+    if (!infoErr) {
+      const ensureColumn = (name: string, definition: string) => {
+        if (!rows.some((row: any) => row.name === name)) {
+          db.run(`ALTER TABLE sdr_awards ADD COLUMN ${definition}`);
+        }
+      };
+      ensureColumn("award_amount", "TEXT");
+      ensureColumn("set_aside", "TEXT");
+      ensureColumn("place_city", "TEXT");
+      ensureColumn("place_state", "TEXT");
+      ensureColumn("place_country", "TEXT");
+      ensureColumn("contact_name", "TEXT");
+      ensureColumn("contact_email", "TEXT");
+    }
+  });
+
+  db.all("PRAGMA table_info(sdr_scoring_jobs)", (infoErr, rows) => {
+    if (!infoErr && !rows.some((row: any) => row.name === "auth_token")) {
+      db.run("ALTER TABLE sdr_scoring_jobs ADD COLUMN auth_token TEXT");
+    }
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_scoring_jobs (
+      id TEXT PRIMARY KEY,
+      entity_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      auth_token TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      FOREIGN KEY(entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE
+    )
+  `);
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_sdr_scoring_jobs_status ON sdr_scoring_jobs(status, created_at)"
+  );
 });
 
 function run(sql: string, params: any[] = []): Promise<void> {

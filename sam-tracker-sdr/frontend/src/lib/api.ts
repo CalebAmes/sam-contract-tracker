@@ -41,3 +41,21 @@ export async function deleteAllScoringEntities() {
   const { data } = await apiClient.delete("/scoring/entities");
   return data;
 }
+
+export async function startScoringScan(entityIds?: string[], authToken?: string) {
+  const { data } = await apiClient.post("/scoring/scan", {
+    entityIds,
+    authToken,
+  });
+  return data;
+}
+
+export async function fetchScoringQueue() {
+  const { data } = await apiClient.get("/scoring/queue");
+  return data;
+}
+
+export async function fetchScoringEntityDetail(entityId: string) {
+  const { data } = await apiClient.get(`/scoring/entities/${entityId}`);
+  return data;
+}

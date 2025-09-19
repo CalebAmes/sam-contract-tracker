@@ -5,6 +5,8 @@ import {
   SDRScoreMetricDefinition,
   SDRScorecard,
   SDRScoringEntity,
+  SDRScoringJob,
+  SDRScoringJobStatus,
 } from "./schema";
 import { sdrDb } from "./sqlite";
 
@@ -30,6 +32,21 @@ const intakeNotes: SDRIntakeNote[] = [];
 const scorecards: SDRScorecard[] = [];
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+function mapJobRow(row: any): SDRScoringJob {
+  return {
+    id: row.id,
+    entityId: row.entity_id,
+    status: row.status as SDRScoringJobStatus,
+    error: row.error ?? null,
+    createdAt: row.created_at,
+    startedAt: row.started_at ?? null,
+    completedAt: row.completed_at ?? null,
+    entityName: row.entity_name ?? undefined,
+    entityUei: row.uei ?? undefined,
+    authToken: row.auth_token ?? undefined,
+  };
+}
 
 async function findOrCreateEntity(
   opportunity: SDRIntakeOpportunity
@@ -123,10 +140,17 @@ async function upsertAward(opportunity: SDRIntakeOpportunity, entityId?: string)
        awardee_uei,
        awarding_office,
        value,
+       award_amount,
+        set_aside,
+        place_city,
+        place_state,
+        place_country,
+        contact_name,
+        contact_email,
        entity_id,
        created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        solicitation_number = excluded.solicitation_number,
        title = excluded.title,
@@ -140,6 +164,13 @@ async function upsertAward(opportunity: SDRIntakeOpportunity, entityId?: string)
        awardee_uei = excluded.awardee_uei,
        awarding_office = excluded.awarding_office,
        value = excluded.value,
+       award_amount = excluded.award_amount,
+        set_aside = excluded.set_aside,
+        place_city = excluded.place_city,
+        place_state = excluded.place_state,
+        place_country = excluded.place_country,
+        contact_name = excluded.contact_name,
+        contact_email = excluded.contact_email,
        entity_id = excluded.entity_id,
        updated_at = excluded.updated_at
     `,
@@ -157,6 +188,13 @@ async function upsertAward(opportunity: SDRIntakeOpportunity, entityId?: string)
       opportunity.awardeeUei ?? null,
       opportunity.awardingOffice ?? null,
       opportunity.value ?? null,
+      opportunity.awardAmount ?? null,
+      opportunity.setAside ?? null,
+      opportunity.placeCity ?? null,
+      opportunity.placeState ?? null,
+      opportunity.placeCountry ?? null,
+      opportunity.contactName ?? null,
+      opportunity.contactEmail ?? null,
       entityId ?? null,
       now,
       now,
@@ -227,15 +265,27 @@ function mapAwardRow(row: any): SDRIntakeOpportunity {
     awardeeUei: row.awardee_uei ?? undefined,
     awardingOffice: row.awarding_office ?? undefined,
     value: row.value ?? undefined,
+    awardAmount: row.award_amount ?? undefined,
+    setAside: row.set_aside ?? undefined,
+    placeCity: row.place_city ?? undefined,
+    placeState: row.place_state ?? undefined,
+    placeCountry: row.place_country ?? undefined,
+    contactName: row.contact_name ?? undefined,
+    contactEmail: row.contact_email ?? undefined,
   };
+}
+
+async function fetchEntityRowById(id: string): Promise<any | undefined> {
+  return sdrDb.get(`SELECT * FROM sdr_entities WHERE id = ?`, [id]);
 }
 
 function mapEntityRow(row: any): SDRScoringEntity {
   const statusValue = typeof row.status === "string" ? row.status : "pending";
   const allowedStatuses: SDRScoringEntity["status"][] = [
     "pending",
-    "ready",
     "queued",
+    "processing",
+    "ready",
   ];
   const normalizedStatus = (allowedStatuses.includes(statusValue as any)
     ? (statusValue as SDRScoringEntity["status"])
@@ -269,6 +319,17 @@ export const SDRIntakeRepository = {
   async getById(id: string): Promise<SDRIntakeOpportunity | undefined> {
     const row = await sdrDb.get(`SELECT * FROM sdr_awards WHERE id = ?`, [id]);
     return row ? mapAwardRow(row) : undefined;
+  },
+
+  async listByEntity(entityId: string): Promise<SDRIntakeOpportunity[]> {
+    const rows = await sdrDb.all(
+      `SELECT *
+       FROM sdr_awards
+       WHERE entity_id = ?
+       ORDER BY datetime(COALESCE(modified_date, created_at)) DESC`,
+      [entityId]
+    );
+    return rows.map(mapAwardRow);
   },
 
   async listNotes(opportunityId: string): Promise<SDRIntakeNote[]> {
@@ -322,7 +383,15 @@ export const SDRScoringRepository = {
     const rows = await sdrDb.all(`
       SELECT *
       FROM sdr_entities
-      ORDER BY stale DESC, datetime(COALESCE(latest_modified_date, updated_at)) DESC
+      ORDER BY
+        CASE status
+          WHEN 'processing' THEN 0
+          WHEN 'queued' THEN 1
+          WHEN 'pending' THEN 2
+          ELSE 3
+        END,
+        stale DESC,
+        datetime(COALESCE(latest_modified_date, updated_at)) DESC
       LIMIT 500
     `);
     return rows.map(mapEntityRow);
@@ -332,5 +401,164 @@ export const SDRScoringRepository = {
     await sdrDb.run(`DELETE FROM sdr_entity_awards`);
     await sdrDb.run(`UPDATE sdr_awards SET entity_id = NULL`);
     await sdrDb.run(`DELETE FROM sdr_entities`);
+    await sdrDb.run(`DELETE FROM sdr_scoring_jobs`);
   },
+
+  async getEntityById(id: string): Promise<SDRScoringEntity | undefined> {
+    const row = await fetchEntityRowById(id);
+    return row ? mapEntityRow(row) : undefined;
+  },
+
+  async getEntityDetail(id: string): Promise<
+    | { entity: SDRScoringEntity; awards: SDRIntakeOpportunity[] }
+    | undefined
+  > {
+    const row = await fetchEntityRowById(id);
+    if (!row) {
+      return undefined;
+    }
+    const entity = mapEntityRow(row);
+    if (!entity) {
+      return undefined;
+    }
+    const awards = await SDRIntakeRepository.listByEntity(id);
+    return { entity, awards };
+  },
+};
+
+async function listStaleEntityIds(limit = 50): Promise<string[]> {
+  const rows = await sdrDb.all<{ id: string }>(
+    `SELECT id FROM sdr_entities WHERE stale = 1 ORDER BY datetime(COALESCE(latest_modified_date, updated_at)) DESC LIMIT ?`,
+    [limit]
+  );
+  return rows.map((row) => row.id);
+}
+
+async function setEntityStatus(
+  entityId: string,
+  status: SDRScoringEntity["status"],
+  stale?: boolean
+) {
+  const now = new Date().toISOString();
+  const params: any[] = [status, now, entityId];
+  let sql = `UPDATE sdr_entities SET status = ?, updated_at = ? WHERE id = ?`;
+  if (typeof stale === "boolean") {
+    sql = `UPDATE sdr_entities SET status = ?, stale = ?, updated_at = ? WHERE id = ?`;
+    params.splice(1, 0, stale ? 1 : 0);
+  }
+  await sdrDb.run(sql, params);
+}
+
+async function enqueueScoringJobs(
+  entityIds: string[],
+  authToken: string
+): Promise<SDRScoringJob[]> {
+  if (entityIds.length === 0) {
+    return [];
+  }
+  const now = new Date().toISOString();
+  const jobs: SDRScoringJob[] = [];
+  for (const entityId of entityIds) {
+    const existing = await sdrDb.get<{ id: string }>(
+      `SELECT id FROM sdr_scoring_jobs WHERE entity_id = ? AND status IN ('queued','processing') LIMIT 1`,
+      [entityId]
+    );
+    if (existing) {
+      continue;
+    }
+    const jobId = uuidv4();
+    await sdrDb.run(
+      `INSERT INTO sdr_scoring_jobs (id, entity_id, status, auth_token, created_at) VALUES (?, ?, 'queued', ?, ?)` ,
+      [jobId, entityId, authToken, now]
+    );
+    await setEntityStatus(entityId, "queued");
+    const row = await sdrDb.get(
+      `SELECT j.*, e.entity_name, e.uei FROM sdr_scoring_jobs j LEFT JOIN sdr_entities e ON e.id = j.entity_id WHERE j.id = ?`,
+      [jobId]
+    );
+    if (row) {
+      jobs.push(mapJobRow(row));
+    }
+  }
+  return jobs;
+}
+
+async function getNextQueuedJob(): Promise<SDRScoringJob | undefined> {
+  const row = await sdrDb.get(
+    `SELECT j.*, e.entity_name, e.uei FROM sdr_scoring_jobs j LEFT JOIN sdr_entities e ON e.id = j.entity_id WHERE j.status = 'queued' ORDER BY j.created_at ASC LIMIT 1`
+  );
+  return row ? mapJobRow(row) : undefined;
+}
+
+async function markJobProcessing(jobId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_scoring_jobs SET status = 'processing', started_at = ?, error = NULL WHERE id = ?`,
+    [now, jobId]
+  );
+}
+
+async function markJobCompleted(jobId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_scoring_jobs SET status = 'completed', completed_at = ?, error = NULL WHERE id = ?`,
+    [now, jobId]
+  );
+}
+
+async function markJobFailed(jobId: string, error: string): Promise<void> {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_scoring_jobs SET status = 'failed', completed_at = ?, error = ? WHERE id = ?`,
+    [now, error, jobId]
+  );
+}
+
+async function listQueueJobs(limit = 50): Promise<SDRScoringJob[]> {
+  const rows = await sdrDb.all(
+    `SELECT j.*, e.entity_name, e.uei FROM sdr_scoring_jobs j LEFT JOIN sdr_entities e ON e.id = j.entity_id ORDER BY datetime(j.created_at) DESC LIMIT ?`,
+    [limit]
+  );
+  return rows.map(mapJobRow);
+}
+
+async function getActiveJob(): Promise<SDRScoringJob | undefined> {
+  const row = await sdrDb.get(
+    `SELECT j.*, e.entity_name, e.uei FROM sdr_scoring_jobs j LEFT JOIN sdr_entities e ON e.id = j.entity_id WHERE j.status = 'processing' LIMIT 1`
+  );
+  return row ? mapJobRow(row) : undefined;
+}
+
+async function markEntityRescored(entityId: string) {
+  await setEntityStatus(entityId, "ready", false);
+}
+
+async function getQueueSummary() {
+  const jobs = await listQueueJobs(100);
+  const activeJob = jobs.find((job) => job.status === "processing");
+  const queuedJobs = jobs.filter((job) => job.status === "queued");
+  const recentJobs = jobs
+    .filter((job) => job.status === "completed")
+    .slice(0, 10);
+  const failedJobs = jobs.filter((job) => job.status === "failed").slice(0, 10);
+  return {
+    activeJob,
+    queuedJobs,
+    recentJobs,
+    failedJobs,
+  };
+}
+
+export const SDRScoringQueueRepository = {
+  listStaleEntityIds,
+  enqueueScoringJobs,
+  getNextQueuedJob,
+  markJobProcessing,
+  markJobCompleted,
+  markJobFailed,
+  listQueueJobs,
+  getActiveJob,
+  getQueueSummary,
+  setEntityStatus,
+  markEntityRescored,
 };

@@ -16,6 +16,13 @@ export interface SDRIntakeOpportunity {
   awardeeUei?: string;
   awardingOffice?: string;
   value?: string;
+  awardAmount?: string;
+  setAside?: string;
+  placeCity?: string;
+  placeState?: string;
+  placeCountry?: string;
+  contactName?: string;
+  contactEmail?: string;
 }
 
 export interface SDRIntakeNote {
@@ -69,6 +76,21 @@ export interface SDRScoringEntity {
   contactEmail?: string;
   contactPhone?: string;
   website?: string;
-  status: "pending" | "ready" | "queued";
+  status: "pending" | "queued" | "processing" | "ready";
   stale: boolean;
+}
+
+export type SDRScoringJobStatus = "queued" | "processing" | "completed" | "failed";
+
+export interface SDRScoringJob {
+  id: string;
+  entityId: string;
+  status: SDRScoringJobStatus;
+  error?: string | null;
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  entityName?: string;
+  entityUei?: string;
+  authToken?: string | null;
 }

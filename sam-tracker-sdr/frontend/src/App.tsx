@@ -16,6 +16,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Intake } from "./pages/Intake";
 import { Scoring } from "./pages/Scoring";
 import { Queue } from "./pages/Queue";
+import { ScoringEntityDetail } from "./pages/ScoringEntityDetail";
 
 interface NavItem {
   to: string;
@@ -154,6 +155,7 @@ function AppShell() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/intake" element={<Intake />} />
               <Route path="/scoring" element={<Scoring />} />
+              <Route path="/scoring/entities/:entityId" element={<ScoringEntityDetail />} />
               <Route path="/queue/:queueId" element={<Queue />} />
               <Route path="*" element={<Dashboard />} />
             </Routes>

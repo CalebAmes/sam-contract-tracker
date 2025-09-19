@@ -6,6 +6,7 @@ import {
   ColumnDef,
   ColumnFiltersState,
   PaginationState,
+  Row,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -34,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "./ui/table";
+import { cn } from "../lib/utils";
 
 export interface DataTableToolbarProps<TData> {
   table: ReturnType<typeof useReactTable<TData>>;
@@ -97,6 +99,7 @@ export interface DataTableProps<TData> {
   additionalToolbarActions?: React.ReactNode;
   initialPageSize?: number;
   pageSizeOptions?: number[];
+  getRowClassName?: (row: Row<TData>) => string | undefined;
 }
 
 export function DataTable<TData>({
@@ -107,6 +110,7 @@ export function DataTable<TData>({
   additionalToolbarActions,
   initialPageSize = 10,
   pageSizeOptions = [10, 25, 50, 100],
+  getRowClassName,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -173,7 +177,11 @@ export function DataTable<TData>({
             <TableBody>
               {table.getRowModel().rows.length ? (
                 table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() ? "selected" : undefined}
+                  className={cn(getRowClassName?.(row))}
+                >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

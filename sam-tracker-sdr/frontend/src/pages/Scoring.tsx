@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { ColumnDef } from "@tanstack/react-table";
-import { Clock, Eye, EyeOff, Mail } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ColumnDef, Row } from "@tanstack/react-table";
+import { Clock, Eye, EyeOff, Loader2, Mail, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import {
   DataTable,
@@ -10,10 +11,11 @@ import {
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-// (Card removed for a leaner toolbar-style token UI)
 import {
   deleteAllScoringEntities,
+  fetchScoringQueue,
   fetchScoringSummary,
+  startScoringScan,
 } from "../lib/api";
 
 const TOKEN_EXPIRATION_MINUTES = 30;
@@ -28,8 +30,27 @@ export interface ScoringEntity {
   contactEmail?: string;
   contactPhone?: string;
   website?: string;
-  status: "pending" | "ready" | "queued";
+  status: "pending" | "queued" | "processing" | "ready";
   stale: boolean;
+}
+
+interface ScoringJob {
+  id: string;
+  entityId: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  entityName?: string;
+  entityUei?: string;
+  error?: string | null;
+}
+
+interface ScoringQueueState {
+  activeJob?: ScoringJob;
+  queuedJobs: ScoringJob[];
+  recentJobs: ScoringJob[];
+  failedJobs: ScoringJob[];
 }
 
 function formatDate(value?: string) {
@@ -54,18 +75,29 @@ export function Scoring() {
   const [token, setToken] = useState("");
   const [tokenSavedAt, setTokenSavedAt] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [queueState, setQueueState] = useState<ScoringQueueState | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
-  const loadEntities = () =>
-    fetchScoringSummary()
-      .then(setRows)
-      .catch((error) => {
-        console.error("Unable to load scoring summary", error);
-      })
-      .finally(() => setLoading(false));
+  const loadEntities = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
+    try {
+      const data = await fetchScoringSummary();
+      setRows(data);
+    } catch (error) {
+      console.error("Unable to load scoring summary", error);
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     loadEntities();
-  }, []);
+  }, [loadEntities]);
 
   useEffect(() => {
     const storedToken = localStorage.getItem("sdr_sam_token");
@@ -112,19 +144,58 @@ export function Scoring() {
     return { minutes, seconds };
   }, [tokenSavedAt]);
 
-  const tokenExpired = tokenAge ? tokenAge.minutes >= TOKEN_EXPIRATION_MINUTES : false;
+  const tokenExpired = tokenAge
+    ? tokenAge.minutes >= TOKEN_EXPIRATION_MINUTES
+    : false;
+
+  const refreshQueue = useCallback(async () => {
+    try {
+      const state = await fetchScoringQueue();
+      setQueueState(state);
+      setQueueError(null);
+      const hasActive =
+        Boolean(state?.activeJob) || (state?.queuedJobs?.length ?? 0) > 0;
+      if (hasActive) {
+        await loadEntities({ silent: true });
+      }
+    } catch (error) {
+      console.error("Unable to fetch scoring queue", error);
+      setQueueError("Unable to load queue status");
+    }
+  }, [loadEntities]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | undefined;
+    let active = true;
+
+    const poll = async () => {
+      await refreshQueue();
+      if (!active) return;
+      timer = setTimeout(poll, 3000);
+    };
+
+    poll();
+
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [refreshQueue]);
 
   const handleClear = async () => {
     if (clearing) {
       return;
     }
-    if (!window.confirm("This will delete all cached scoring entities. Continue?")) {
+    if (
+      !window.confirm("This will delete all cached scoring entities. Continue?")
+    ) {
       return;
     }
     setClearing(true);
     try {
       await deleteAllScoringEntities();
       setRows([]);
+      await refreshQueue();
     } catch (error) {
       console.error("Unable to clear scoring entities", error);
     } finally {
@@ -132,16 +203,71 @@ export function Scoring() {
     }
   };
 
+  const handleStartScan = async () => {
+    if (isScanning) {
+      return;
+    }
+    if (!token) {
+      setQueueError("Token required to run enrichment");
+      return;
+    }
+    setIsScanning(true);
+    setQueueError(null);
+    try {
+      const staleIds = rows
+        .filter((entity) => entity.stale)
+        .map((entity) => entity.id);
+      await startScoringScan(staleIds.length ? staleIds : undefined, token);
+      await loadEntities({ silent: true });
+      await refreshQueue();
+    } catch (error) {
+      console.error("Unable to start scoring scan", error);
+      setQueueError("Failed to start scan");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const columns = useMemo<ColumnDef<ScoringEntity>[]>(() => {
+    const statusStyles: Record<
+      ScoringEntity["status"],
+      { label: string; className: string }
+    > = {
+      pending: {
+        label: "Pending",
+        className: "border border-border/60 bg-muted/30 text-muted-foreground",
+      },
+      queued: {
+        label: "Queued",
+        className: "border border-amber-500/40 bg-amber-500/10 text-amber-300",
+      },
+      processing: {
+        label: "Processing",
+        className: "border border-blue-500/40 bg-blue-500/10 text-blue-200",
+      },
+      ready: {
+        label: "Ready",
+        className:
+          "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+      },
+    };
+
     const base: ColumnDef<ScoringEntity>[] = [
       {
         accessorKey: "entityName",
         header: ({ column }) => sortableHeader("Entity", column),
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span className="font-medium">{row.original.entityName}</span>
+            <Link
+              to={`/scoring/entities/${row.original.id}`}
+              className="font-medium text-foreground hover:text-primary"
+            >
+              {row.original.entityName}
+            </Link>
             {row.original.uei ? (
-              <span className="text-xs text-muted-foreground">UEI {row.original.uei}</span>
+              <span className="text-xs text-muted-foreground">
+                UEI {row.original.uei}
+              </span>
             ) : null}
           </div>
         ),
@@ -166,7 +292,9 @@ export function Scoring() {
         header: ({ column }) => sortableHeader("Needs Rescore", column),
         cell: ({ row }) => (
           <span
-            className={row.original.stale ? "text-amber-400" : "text-muted-foreground"}
+            className={
+              row.original.stale ? "text-amber-400" : "text-muted-foreground"
+            }
           >
             {row.original.stale ? "Needs rescore" : "Current"}
           </span>
@@ -181,7 +309,9 @@ export function Scoring() {
             <div className="flex flex-col text-sm">
               <span>{entity.contactEmail ?? "—"}</span>
               {entity.contactPhone ? (
-                <span className="text-xs text-muted-foreground">{entity.contactPhone}</span>
+                <span className="text-xs text-muted-foreground">
+                  {entity.contactPhone}
+                </span>
               ) : null}
             </div>
           );
@@ -190,7 +320,16 @@ export function Scoring() {
       {
         accessorKey: "status",
         header: ({ column }) => sortableHeader("Status", column),
-        cell: ({ row }) => row.original.status,
+        cell: ({ row }) => {
+          const config = statusStyles[row.original.status];
+          return (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}
+            >
+              {config.label}
+            </span>
+          );
+        },
       },
       {
         id: "actions",
@@ -214,6 +353,16 @@ export function Scoring() {
 
     const selectable = createSelectableColumn<ScoringEntity>();
     return selectable ? [selectable, ...base] : base;
+  }, []);
+
+  const getRowClassName = useCallback((row: Row<ScoringEntity>) => {
+    if (row.original.status === "processing") {
+      return "border-blue-500/50 bg-blue-500/10";
+    }
+    if (row.original.status === "queued") {
+      return "border-amber-500/40 bg-amber-500/5";
+    }
+    return undefined;
   }, []);
 
   return (
@@ -250,7 +399,11 @@ export function Scoring() {
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               aria-label={showToken ? "Hide token" : "Show token"}
             >
-              {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showToken ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
             </button>
           </div>
 
@@ -291,6 +444,25 @@ export function Scoring() {
               "No token saved"
             )}
           </span>
+
+          <div className="flex-1" />
+          {queueError ? (
+            <span className="text-xs text-red-400">{queueError}</span>
+          ) : null}
+
+          <Button
+            type="button"
+            onClick={handleStartScan}
+            disabled={isScanning || rows.length === 0}
+            className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-90 disabled:opacity-60"
+          >
+            {isScanning ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {isScanning ? "Scanning…" : "Run Enrichment"}
+          </Button>
         </div>
       </div>
 
@@ -299,12 +471,37 @@ export function Scoring() {
           Total entities queued: {loading ? "—" : rows.length.toLocaleString()}
         </span>
         <span>
-          Needs rescore: {loading ? "—" : rows.filter((entity) => entity.stale).length}
+          Needs rescore:{" "}
+          {loading ? "—" : rows.filter((entity) => entity.stale).length}
         </span>
       </div>
 
+      {queueState ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/50 bg-card/50 p-3 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              Active
+            </span>
+            <span className="font-medium">
+              {queueState.activeJob?.entityName ?? "Idle"}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground ml-auto">
+            <span>Queued {queueState.queuedJobs.length}</span>
+            <span>Recent {queueState.recentJobs.length}</span>
+            {queueState.failedJobs.length ? (
+              <span className="text-red-400">
+                Failed {queueState.failedJobs.length}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading scoring results…</p>
+        <p className="text-sm text-muted-foreground">
+          Loading scoring results…
+        </p>
       ) : (
         <DataTable<ScoringEntity>
           columns={columns}
@@ -313,6 +510,7 @@ export function Scoring() {
           searchPlaceholder="Filter entities..."
           initialPageSize={50}
           pageSizeOptions={[25, 50, 100, 200]}
+          getRowClassName={getRowClassName}
         />
       )}
     </section>

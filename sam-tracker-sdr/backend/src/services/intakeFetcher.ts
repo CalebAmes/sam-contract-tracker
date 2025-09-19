@@ -9,7 +9,7 @@ const LOOKBACK_DAYS = 7;
 const MAX_PAGES = 20;
 const MAX_RECORDS = PAGE_SIZE * MAX_PAGES;
 
-type SamSearchResult = {
+export type SamSearchResult = {
   _id?: string;
   title?: string;
   solicitationNumber?: string;
@@ -34,7 +34,7 @@ type SamSearchResult = {
   totalContractValue?: number;
 };
 
-type SamSearchResponse = {
+export type SamSearchResponse = {
   _embedded?: {
     results?: SamSearchResult[];
   };
@@ -103,7 +103,9 @@ function coerceIsoDate(value?: string): string | undefined {
   return date.toISOString();
 }
 
-function mapResultToOpportunity(result: SamSearchResult): SDRIntakeOpportunity | undefined {
+export function mapSearchResultToOpportunity(
+  result: SamSearchResult
+): SDRIntakeOpportunity | undefined {
   const id = result._id;
   if (!id) {
     return undefined;
@@ -233,7 +235,7 @@ export async function fetchRecentAwards(options: FetchOptions = {}) {
         break;
       }
 
-      const opportunity = mapResultToOpportunity(result);
+      const opportunity = mapSearchResultToOpportunity(result);
       if (!opportunity) {
         continue;
       }
