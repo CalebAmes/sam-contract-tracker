@@ -4,14 +4,20 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "sam-tracker-sdr/frontend",
+    "sam-tracker-sdr/backend"
   ],
   "scripts": {
-    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend && npm install --workspace=sam-tracker-sdr/frontend && npm install --workspace=sam-tracker-sdr/backend",
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run start --workspace=frontend\"",
+    "dev:sdr": "concurrently \"npm run dev --workspace=sam-tracker-sdr/backend\" \"npm run start --workspace=sam-tracker-sdr/frontend\"",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "build:sdr": "npm run build --workspace=sam-tracker-sdr/backend && npm run build --workspace=sam-tracker-sdr/frontend",
     "start": "npm run start --workspace=backend",
-    "test": "npm run test --workspace=frontend"
+    "start:sdr": "npm run start --workspace=sam-tracker-sdr/backend",
+    "test": "npm run test --workspace=frontend",
+    "test:sdr": "npm run test --workspace=sam-tracker-sdr/frontend"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
