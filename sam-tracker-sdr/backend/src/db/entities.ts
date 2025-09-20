@@ -404,6 +404,17 @@ export const SDRScoringRepository = {
     await sdrDb.run(`DELETE FROM sdr_scoring_jobs`);
   },
 
+  async markAllEntitiesStale(): Promise<void> {
+    const now = new Date().toISOString();
+    await sdrDb.run(
+      `UPDATE sdr_entities
+       SET stale = 1,
+           status = 'pending',
+           updated_at = ?`,
+      [now]
+    );
+  },
+
   async getEntityById(id: string): Promise<SDRScoringEntity | undefined> {
     const row = await fetchEntityRowById(id);
     return row ? mapEntityRow(row) : undefined;
@@ -549,6 +560,75 @@ async function getQueueSummary() {
   };
 }
 
+async function removeJob(jobId: string): Promise<void> {
+  await sdrDb.run(`DELETE FROM sdr_scoring_jobs WHERE id = ?`, [jobId]);
+}
+
+async function resetQueuedJobs(): Promise<void> {
+  const queued = await sdrDb.all<{ entity_id: string }>(
+    `SELECT entity_id FROM sdr_scoring_jobs WHERE status IN ('queued','processing')`
+  );
+  if (queued.length > 0) {
+    const now = new Date().toISOString();
+    const ids = queued.map((row) => row.entity_id);
+    const placeholders = ids.map(() => "?").join(",");
+    await sdrDb.run(
+      `UPDATE sdr_entities
+       SET status = 'pending',
+           stale = 1,
+           updated_at = ?
+       WHERE id IN (${placeholders})`,
+      [now, ...ids]
+    );
+  }
+  await sdrDb.run(`DELETE FROM sdr_scoring_jobs WHERE status IN ('queued','processing')`);
+}
+
+async function clearStaleRunningFlags(): Promise<void> {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_entities
+     SET status = 'pending',
+         stale = 1,
+         updated_at = ?
+     WHERE status IN ('processing','queued')`,
+    [now]
+  );
+}
+
+async function markAllEntitiesStale(): Promise<void> {
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_entities
+     SET status = 'pending',
+         stale = 1,
+         updated_at = ?`,
+    [now]
+  );
+}
+
+async function clearFailedJobs(): Promise<void> {
+  const failed = await sdrDb.all<{ entity_id: string | null }>(
+    `SELECT entity_id FROM sdr_scoring_jobs WHERE status = 'failed'`
+  );
+  const ids = failed
+    .map((row) => row.entity_id)
+    .filter((value): value is string => Boolean(value));
+  if (ids.length > 0) {
+    const now = new Date().toISOString();
+    const placeholders = ids.map(() => "?").join(",");
+    await sdrDb.run(
+      `UPDATE sdr_entities
+       SET status = 'pending',
+           stale = 1,
+           updated_at = ?
+       WHERE id IN (${placeholders})`,
+      [now, ...ids]
+    );
+  }
+  await sdrDb.run(`DELETE FROM sdr_scoring_jobs WHERE status = 'failed'`);
+}
+
 export const SDRScoringQueueRepository = {
   listStaleEntityIds,
   enqueueScoringJobs,
@@ -561,4 +641,9 @@ export const SDRScoringQueueRepository = {
   getQueueSummary,
   setEntityStatus,
   markEntityRescored,
+  removeJob,
+  resetQueuedJobs,
+  clearStaleRunningFlags,
+  markAllEntitiesStale,
+  clearFailedJobs,
 };

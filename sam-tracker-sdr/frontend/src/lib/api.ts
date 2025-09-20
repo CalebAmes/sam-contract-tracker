@@ -55,6 +55,21 @@ export async function fetchScoringQueue() {
   return data;
 }
 
+export async function stopScoringQueue() {
+  const { data } = await apiClient.post("/scoring/queue/stop");
+  return data;
+}
+
+export async function clearScoringFailures() {
+  const { data } = await apiClient.delete("/scoring/queue/failed");
+  return data;
+}
+
+export async function resetScoringState() {
+  const { data } = await apiClient.post("/scoring/reset");
+  return data;
+}
+
 export async function fetchScoringEntityDetail(entityId: string) {
   const { data } = await apiClient.get(`/scoring/entities/${entityId}`);
   return data;

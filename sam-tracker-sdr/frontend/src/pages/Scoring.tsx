@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isAxiosError } from "axios";
 import type { ColumnDef, Row } from "@tanstack/react-table";
-import { Clock, Eye, EyeOff, Loader2, Mail, Sparkles } from "lucide-react";
+import {
+  Clock,
+  Eye,
+  EyeOff,
+  Loader2,
+  Mail,
+  Sparkles,
+  Square,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 
 import {
@@ -16,9 +28,33 @@ import {
   fetchScoringQueue,
   fetchScoringSummary,
   startScoringScan,
+  stopScoringQueue,
+  clearScoringFailures,
+  resetScoringState,
 } from "../lib/api";
 
 const TOKEN_EXPIRATION_MINUTES = 30;
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (isAxiosError(error)) {
+    return (
+      (error.response?.data as any)?.error ??
+      (error.response?.data as any)?.message ??
+      error.message ??
+      fallback
+    );
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as any).message);
+  }
+  return fallback;
+}
 
 export interface ScoringEntity {
   id: string;
@@ -51,6 +87,7 @@ interface ScoringQueueState {
   queuedJobs: ScoringJob[];
   recentJobs: ScoringJob[];
   failedJobs: ScoringJob[];
+  running: boolean;
 }
 
 function formatDate(value?: string) {
@@ -78,6 +115,10 @@ export function Scoring() {
   const [queueState, setQueueState] = useState<ScoringQueueState | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [showFailures, setShowFailures] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [clearingFailures, setClearingFailures] = useState(false);
 
   const loadEntities = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -160,7 +201,7 @@ export function Scoring() {
       }
     } catch (error) {
       console.error("Unable to fetch scoring queue", error);
-      setQueueError("Unable to load queue status");
+      setQueueError(toErrorMessage(error, "Unable to load queue status"));
     }
   }, [loadEntities]);
 
@@ -171,7 +212,7 @@ export function Scoring() {
     const poll = async () => {
       await refreshQueue();
       if (!active) return;
-      timer = setTimeout(poll, 3000);
+      timer = setTimeout(poll, 500);
     };
 
     poll();
@@ -222,9 +263,70 @@ export function Scoring() {
       await refreshQueue();
     } catch (error) {
       console.error("Unable to start scoring scan", error);
-      setQueueError("Failed to start scan");
+      setQueueError(toErrorMessage(error, "Failed to start scan"));
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleStopScan = async () => {
+    if (stopping || !queueState?.running) {
+      return;
+    }
+    setStopping(true);
+    try {
+      await stopScoringQueue();
+      await refreshQueue();
+      await loadEntities({ silent: true });
+      setQueueError(null);
+    } catch (error) {
+      console.error("Unable to stop scoring queue", error);
+      setQueueError(toErrorMessage(error, "Failed to stop queue"));
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const handleResetQueue = async () => {
+    if (resetting) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Reset the scoring queue? This will mark every entity as needing a rescan and delete all queued jobs."
+      )
+    ) {
+      return;
+    }
+    setResetting(true);
+    try {
+      await resetScoringState();
+      await refreshQueue();
+      await loadEntities({ silent: true });
+      setQueueError(null);
+    } catch (error) {
+      console.error("Unable to reset scoring state", error);
+      setQueueError(toErrorMessage(error, "Failed to reset scoring state"));
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleClearFailures = async () => {
+    if (clearingFailures) {
+      return;
+    }
+    setClearingFailures(true);
+    try {
+      await clearScoringFailures();
+      await refreshQueue();
+      setShowFailures(false);
+      setQueueError(null);
+    } catch (error) {
+      console.error("Unable to clear scoring failures", error);
+      setQueueError(toErrorMessage(error, "Failed to clear failures"));
+    } finally {
+      setClearingFailures(false);
     }
   };
 
@@ -446,22 +548,53 @@ export function Scoring() {
           </span>
 
           <div className="flex-1" />
-          {queueError ? (
-            <span className="text-xs text-red-400">{queueError}</span>
-          ) : null}
 
           <Button
             type="button"
             onClick={handleStartScan}
-            disabled={isScanning || rows.length === 0}
+            disabled={
+              isScanning || rows.length === 0 || queueState?.running === true
+            }
             className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-90 disabled:opacity-60"
           >
-            {isScanning ? (
+            {isScanning || queueState?.running ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            {isScanning ? "Scanning…" : "Run Enrichment"}
+            {queueState?.running
+              ? "Processing…"
+              : isScanning
+              ? "Scanning…"
+              : "Run Enrichment"}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={handleStopScan}
+            disabled={stopping || !queueState?.running}
+            className="inline-flex items-center gap-2"
+          >
+            {stopping ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Square className="h-4 w-4" />
+            )}
+            {stopping ? "Stopping…" : "Stop"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleResetQueue}
+            disabled={resetting}
+            className="inline-flex items-center gap-2"
+          >
+            {resetting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            {resetting ? "Resetting…" : "Reset Queue"}
           </Button>
         </div>
       </div>
@@ -495,6 +628,66 @@ export function Scoring() {
               </span>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {queueError ? (
+        <div className="rounded-md border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">
+          <p className="font-semibold text-red-200">Queue Error</p>
+          <p className="mt-1 whitespace-pre-wrap text-red-100">{queueError}</p>
+        </div>
+      ) : null}
+
+      {(queueState?.failedJobs?.length ?? 0) > 0 ? (
+        <div className="rounded-md border border-red-500/40 bg-red-500/5 text-sm">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setShowFailures((prev) => !prev)}
+              className="flex items-center gap-2 text-left text-red-200"
+            >
+              {showFailures ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              <span className="font-semibold">Recent Failures</span>
+            </button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={handleClearFailures}
+              disabled={clearingFailures}
+              className="text-red-200 hover:text-red-100"
+            >
+              {clearingFailures ? "Clearing…" : "Clear All"}
+            </Button>
+          </div>
+          {showFailures ? (
+            <ul className="border-t border-red-500/20 px-4 py-3 text-red-100">
+              {(queueState?.failedJobs ?? []).map((job) => (
+                <li
+                  key={job.id}
+                  className="border-b border-red-500/10 py-2 last:border-b-0"
+                >
+                  <div className="font-medium text-red-200">
+                    {job.entityName ?? job.entityId}
+                  </div>
+                  {job.error ? (
+                    <div className="text-[13px] text-red-100/90">
+                      {job.error}
+                    </div>
+                  ) : null}
+                  {job.completedAt ? (
+                    <div className="text-[12px] text-red-200/70">
+                      Completed {formatDate(job.completedAt)}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

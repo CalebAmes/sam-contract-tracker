@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Mail } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { DataTable, createSelectableColumn, sortableHeader } from "../components/data-table";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/ui/button";

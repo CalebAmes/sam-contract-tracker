@@ -66,59 +66,6 @@ db.serialize(() => {
     )
   `);
 
-  db.run(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_uei ON sdr_entities(uei) WHERE uei IS NOT NULL AND uei <> ''"
-  );
-  db.run(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_name ON sdr_entities(entity_name)"
-  );
-  db.run(
-    "CREATE INDEX IF NOT EXISTS idx_sdr_awards_modified_date ON sdr_awards(modified_date DESC)"
-  );
-
-  db.get("PRAGMA table_info(sdr_entities)", (err) => {
-    if (!err) {
-      db.all("PRAGMA table_info(sdr_entities)", (infoErr, rows) => {
-        if (!infoErr) {
-          const hasStale = rows.some((row: any) => row.name === "stale");
-          if (!hasStale) {
-            db.run(
-              "ALTER TABLE sdr_entities ADD COLUMN stale INTEGER DEFAULT 1",
-              (alterErr) => {
-                if (alterErr && !alterErr.message.includes("duplicate column")) {
-                  console.warn("[sqlite] unable to add stale column", alterErr);
-                }
-              }
-            );
-          }
-        }
-      });
-    }
-  });
-
-  db.all("PRAGMA table_info(sdr_awards)", (infoErr, rows) => {
-    if (!infoErr) {
-      const ensureColumn = (name: string, definition: string) => {
-        if (!rows.some((row: any) => row.name === name)) {
-          db.run(`ALTER TABLE sdr_awards ADD COLUMN ${definition}`);
-        }
-      };
-      ensureColumn("award_amount", "TEXT");
-      ensureColumn("set_aside", "TEXT");
-      ensureColumn("place_city", "TEXT");
-      ensureColumn("place_state", "TEXT");
-      ensureColumn("place_country", "TEXT");
-      ensureColumn("contact_name", "TEXT");
-      ensureColumn("contact_email", "TEXT");
-    }
-  });
-
-  db.all("PRAGMA table_info(sdr_scoring_jobs)", (infoErr, rows) => {
-    if (!infoErr && !rows.some((row: any) => row.name === "auth_token")) {
-      db.run("ALTER TABLE sdr_scoring_jobs ADD COLUMN auth_token TEXT");
-    }
-  });
-
   db.run(`
     CREATE TABLE IF NOT EXISTS sdr_scoring_jobs (
       id TEXT PRIMARY KEY,
@@ -132,6 +79,16 @@ db.serialize(() => {
       FOREIGN KEY(entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE
     )
   `);
+
+  db.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_uei ON sdr_entities(uei) WHERE uei IS NOT NULL AND uei <> ''"
+  );
+  db.run(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_name ON sdr_entities(entity_name)"
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_sdr_awards_modified_date ON sdr_awards(modified_date DESC)"
+  );
   db.run(
     "CREATE INDEX IF NOT EXISTS idx_sdr_scoring_jobs_status ON sdr_scoring_jobs(status, created_at)"
   );
