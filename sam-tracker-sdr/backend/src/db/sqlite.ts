@@ -80,6 +80,46 @@ db.serialize(() => {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_entity_profiles (
+      entity_id TEXT PRIMARY KEY,
+      summary_json TEXT,
+      business_info_json TEXT,
+      financial_info_json TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_entity_pocs (
+      id TEXT PRIMARY KEY,
+      entity_id TEXT NOT NULL,
+      poc_type TEXT,
+      name TEXT,
+      title TEXT,
+      email TEXT,
+      phone TEXT,
+      address_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sdr_entity_socio_economic (
+      id TEXT PRIMARY KEY,
+      entity_id TEXT NOT NULL,
+      category TEXT,
+      code TEXT,
+      description TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(entity_id) REFERENCES sdr_entities(id) ON DELETE CASCADE
+    )
+  `);
+
   db.run(
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdr_entities_uei ON sdr_entities(uei) WHERE uei IS NOT NULL AND uei <> ''"
   );
@@ -91,6 +131,12 @@ db.serialize(() => {
   );
   db.run(
     "CREATE INDEX IF NOT EXISTS idx_sdr_scoring_jobs_status ON sdr_scoring_jobs(status, created_at)"
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_sdr_entity_pocs_entity_id ON sdr_entity_pocs(entity_id)"
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_sdr_entity_socio_entity_id ON sdr_entity_socio_economic(entity_id)"
   );
 });
 

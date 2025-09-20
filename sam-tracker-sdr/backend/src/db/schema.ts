@@ -94,3 +94,34 @@ export interface SDRScoringJob {
   entityUei?: string;
   authToken?: string | null;
 }
+
+export interface SDREntityProfile {
+  entityId: string;
+  summary: Record<string, any> | null;
+  businessInformation: Record<string, any> | null;
+  financialInformation: Record<string, any> | null;
+  updatedAt: string;
+}
+
+export interface SDREntityPointOfContact {
+  id: string;
+  entityId: string;
+  type?: string | null;
+  name?: string | null;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SDREntitySocioEconomic {
+  id: string;
+  entityId: string;
+  category?: string | null;
+  code?: string | null;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

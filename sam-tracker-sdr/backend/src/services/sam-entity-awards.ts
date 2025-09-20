@@ -6,6 +6,9 @@ import { SamSearchResult, SamSearchResponse } from "./intakeFetcher";
 const SEARCH_BASE_URL =
   process.env.SAM_API_SEARCH_URL || "https://sam.gov/api/prod/sgs/v1/search";
 const OPPORTUNITY_BASE_URL = "https://sam.gov/api/prod/opps/v2/opportunities";
+const ENTITY_DETAILS_BASE_URL =
+  process.env.SAM_ENTITY_DETAILS_URL ||
+  "https://sam.gov/api/prod/view-entity-details/v4/api/entity";
 const DEFAULT_PAGE_SIZE = 100;
 
 const samApiLimiter = createRateLimiter({
@@ -29,7 +32,6 @@ async function requestSam<T>(
 
 interface SearchAwardsOptions {
   uei: string;
-  authToken?: string;
   cutoffIso: string;
   pageSize?: number;
   maxPages?: number;
@@ -71,19 +73,28 @@ interface AwardDetailResponse {
   description?: Array<{ body?: string }>;
 }
 
-function createHeaders(token?: string) {
-  const headers: Record<string, string> = {
+interface EntityDetailResponse {
+  coreData?: any;
+  entityData?: {
+    coreData?: any;
+  };
+}
+
+function createHeaders() {
+  return {
     Accept: "application/hal+json, application/json",
   };
-  if (token) {
-    headers["x-auth-token"] = token;
-  }
-  return headers;
+}
+
+function createAuthorizedHeaders(token: string) {
+  return {
+    ...createHeaders(),
+    "x-auth-token": token,
+  };
 }
 
 export async function fetchAwardsForEntity({
   uei,
-  authToken,
   cutoffIso,
   pageSize = DEFAULT_PAGE_SIZE,
   maxPages = 10,
@@ -95,7 +106,7 @@ export async function fetchAwardsForEntity({
   while (!stop && page < maxPages) {
     const response = await requestSam(`[sam] fetch awards for UEI ${uei}`, () =>
       axios.get<SamSearchResponse>(SEARCH_BASE_URL, {
-        headers: createHeaders(authToken),
+        headers: createHeaders(),
         params: {
           random: Date.now(),
           index: "opp",
@@ -156,7 +167,7 @@ export async function fetchAwardDetail(
         axios.get<AwardDetailResponse>(
           `${OPPORTUNITY_BASE_URL}/${opportunityId}`,
           {
-            headers: createHeaders(authToken),
+            headers: createHeaders(),
             params: {
               api_key: "null",
               random: Date.now(),
@@ -175,5 +186,39 @@ export async function fetchAwardDetail(
           );
     console.warn(enhanced.message);
     throw enhanced;
+  }
+}
+
+export async function fetchEntityCoreData(
+  uei: string,
+  authToken?: string
+): Promise<EntityDetailResponse | undefined> {
+  if (!authToken) {
+    return undefined;
+  }
+  try {
+    const response = await requestSam(
+      `[sam] fetch entity detail ${uei}`,
+      () =>
+        axios.get<EntityDetailResponse>(`${ENTITY_DETAILS_BASE_URL}/${uei}`, {
+          headers: createAuthorizedHeaders(authToken),
+          params: {
+            sort: "name",
+            sectionName: "coreData",
+            status: "Active",
+            responseType: "json",
+            api_key: "null",
+            random: Date.now(),
+          },
+        })
+    );
+    return response.data;
+  } catch (error) {
+    const enhanced =
+      error instanceof Error
+        ? error
+        : describeAxiosError(error, `[sam] fetch entity detail ${uei}`);
+    console.warn(enhanced.message);
+    return undefined;
   }
 }

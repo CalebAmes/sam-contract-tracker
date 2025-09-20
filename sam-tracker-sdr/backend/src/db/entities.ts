@@ -7,6 +7,9 @@ import {
   SDRScoringEntity,
   SDRScoringJob,
   SDRScoringJobStatus,
+  SDREntityProfile,
+  SDREntityPointOfContact,
+  SDREntitySocioEconomic,
 } from "./schema";
 import { sdrDb } from "./sqlite";
 
@@ -32,6 +35,28 @@ const intakeNotes: SDRIntakeNote[] = [];
 const scorecards: SDRScorecard[] = [];
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+interface EntityDetailPayload {
+  contactEmail?: string;
+  contactPhone?: string;
+  website?: string;
+  summary?: Record<string, any> | null;
+  businessInformation?: Record<string, any> | null;
+  financialInformation?: Record<string, any> | null;
+  pointsOfContact?: Array<{
+    type?: string | null;
+    name?: string | null;
+    title?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: Record<string, any> | null;
+  }>;
+  socioEconomic?: Array<{
+    category: string;
+    code?: string | null;
+    description?: string | null;
+  }>;
+}
 
 function mapJobRow(row: any): SDRScoringJob {
   return {
@@ -249,6 +274,249 @@ async function refreshEntityStats(entityId: string) {
   );
 }
 
+async function updateEntityProfileRow(
+  entityId: string,
+  profile: {
+    contactEmail?: string;
+    contactPhone?: string;
+    website?: string;
+  }
+) {
+  const normalize = (value?: string) =>
+    typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : undefined;
+
+  const contactEmail = normalize(profile.contactEmail);
+  const contactPhone = normalize(profile.contactPhone);
+  const website = normalize(profile.website);
+  if (
+    contactEmail === undefined &&
+    contactPhone === undefined &&
+    website === undefined
+  ) {
+    return;
+  }
+  const now = new Date().toISOString();
+  await sdrDb.run(
+    `UPDATE sdr_entities
+     SET contact_email = COALESCE(?, contact_email),
+         contact_phone = COALESCE(?, contact_phone),
+         website = COALESCE(?, website),
+         updated_at = ?
+     WHERE id = ?`,
+    [
+      contactEmail ?? null,
+      contactPhone ?? null,
+      website ?? null,
+      now,
+      entityId,
+    ]
+  );
+}
+
+async function upsertEntityProfileRow(
+  entityId: string,
+  profile: {
+    summary?: Record<string, any> | null;
+    businessInformation?: Record<string, any> | null;
+    financialInformation?: Record<string, any> | null;
+  }
+) {
+  const now = new Date().toISOString();
+  const summaryJson = profile.summary ? JSON.stringify(profile.summary) : null;
+  const bizJson = profile.businessInformation
+    ? JSON.stringify(profile.businessInformation)
+    : null;
+  const financialJson = profile.financialInformation
+    ? JSON.stringify(profile.financialInformation)
+    : null;
+
+  await sdrDb.run(
+    `INSERT INTO sdr_entity_profiles (
+       entity_id,
+       summary_json,
+       business_info_json,
+       financial_info_json,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(entity_id) DO UPDATE SET
+       summary_json = excluded.summary_json,
+       business_info_json = excluded.business_info_json,
+       financial_info_json = excluded.financial_info_json,
+       updated_at = excluded.updated_at`,
+    [entityId, summaryJson, bizJson, financialJson, now]
+  );
+}
+
+async function replaceEntityPointsOfContact(
+  entityId: string,
+  points: NonNullable<EntityDetailPayload["pointsOfContact"]>
+) {
+  await sdrDb.run(`DELETE FROM sdr_entity_pocs WHERE entity_id = ?`, [entityId]);
+  if (!points || points.length === 0) {
+    return;
+  }
+  const now = new Date().toISOString();
+  for (const point of points) {
+    const hasData =
+      (point.type && point.type.trim().length > 0) ||
+      (point.name && point.name.trim().length > 0) ||
+      (point.title && point.title.trim().length > 0) ||
+      (point.email && point.email.trim().length > 0) ||
+      (point.phone && point.phone.trim().length > 0);
+    if (!hasData) {
+      continue;
+    }
+    const id = uuidv4();
+    const addressJson = point.address ? JSON.stringify(point.address) : null;
+    await sdrDb.run(
+      `INSERT INTO sdr_entity_pocs (
+         id,
+         entity_id,
+         poc_type,
+         name,
+         title,
+         email,
+         phone,
+         address_json,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        entityId,
+        point.type ?? null,
+        point.name ?? null,
+        point.title ?? null,
+        point.email ?? null,
+        point.phone ?? null,
+        addressJson,
+        now,
+        now,
+      ]
+    );
+  }
+}
+
+async function replaceEntitySocioEconomic(
+  entityId: string,
+  entries: NonNullable<EntityDetailPayload["socioEconomic"]>
+) {
+  await sdrDb.run(
+    `DELETE FROM sdr_entity_socio_economic WHERE entity_id = ?`,
+    [entityId]
+  );
+  if (!entries || entries.length === 0) {
+    return;
+  }
+  const now = new Date().toISOString();
+  for (const entry of entries) {
+    if (!entry) {
+      continue;
+    }
+    const id = uuidv4();
+    await sdrDb.run(
+      `INSERT INTO sdr_entity_socio_economic (
+         id,
+         entity_id,
+         category,
+         code,
+         description,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        entityId,
+        entry.category ?? null,
+        entry.code ?? null,
+        entry.description ?? null,
+        now,
+        now,
+      ]
+    );
+  }
+}
+
+async function getEntityProfileRow(
+  entityId: string
+): Promise<SDREntityProfile | null> {
+  const row = await sdrDb.get<any>(
+    `SELECT * FROM sdr_entity_profiles WHERE entity_id = ?`,
+    [entityId]
+  );
+  if (!row) {
+    return null;
+  }
+  const parseJson = (value: any) => {
+    if (typeof value !== "string" || value.length === 0) {
+      return null;
+    }
+    try {
+      return JSON.parse(value);
+    } catch (_error) {
+      return null;
+    }
+  };
+  return {
+    entityId: row.entity_id,
+    summary: parseJson(row.summary_json),
+    businessInformation: parseJson(row.business_info_json),
+    financialInformation: parseJson(row.financial_info_json),
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listEntityPointsOfContact(
+  entityId: string
+): Promise<SDREntityPointOfContact[]> {
+  const rows = await sdrDb.all<any>(
+    `SELECT * FROM sdr_entity_pocs WHERE entity_id = ? ORDER BY datetime(updated_at) DESC`,
+    [entityId]
+  );
+  const parseJson = (value: any) => {
+    if (typeof value !== "string" || value.length === 0) {
+      return null;
+    }
+    try {
+      return JSON.parse(value);
+    } catch (_error) {
+      return null;
+    }
+  };
+  return rows.map((row) => ({
+    id: row.id,
+    entityId: row.entity_id,
+    type: row.poc_type ?? null,
+    name: row.name ?? null,
+    title: row.title ?? null,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
+    address: parseJson(row.address_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function listEntitySocioEconomic(
+  entityId: string
+): Promise<SDREntitySocioEconomic[]> {
+  const rows = await sdrDb.all<any>(
+    `SELECT * FROM sdr_entity_socio_economic WHERE entity_id = ? ORDER BY datetime(updated_at) DESC`,
+    [entityId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    entityId: row.entity_id,
+    category: row.category ?? null,
+    code: row.code ?? null,
+    description: row.description ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
 function mapAwardRow(row: any): SDRIntakeOpportunity {
   return {
     id: row.id,
@@ -421,7 +689,13 @@ export const SDRScoringRepository = {
   },
 
   async getEntityDetail(id: string): Promise<
-    | { entity: SDRScoringEntity; awards: SDRIntakeOpportunity[] }
+    | {
+        entity: SDRScoringEntity;
+        awards: SDRIntakeOpportunity[];
+        profile: SDREntityProfile | null;
+        pointsOfContact: SDREntityPointOfContact[];
+        socioEconomic: SDREntitySocioEconomic[];
+      }
     | undefined
   > {
     const row = await fetchEntityRowById(id);
@@ -433,7 +707,24 @@ export const SDRScoringRepository = {
       return undefined;
     }
     const awards = await SDRIntakeRepository.listByEntity(id);
-    return { entity, awards };
+    const profile = await getEntityProfileRow(id);
+    const pointsOfContact = await listEntityPointsOfContact(id);
+    const socioEconomic = await listEntitySocioEconomic(id);
+    return { entity, awards, profile, pointsOfContact, socioEconomic };
+  },
+
+  async saveEntityDetail(
+    entityId: string,
+    detail: EntityDetailPayload
+  ): Promise<void> {
+    await updateEntityProfileRow(entityId, detail);
+    await upsertEntityProfileRow(entityId, {
+      summary: detail.summary ?? null,
+      businessInformation: detail.businessInformation ?? null,
+      financialInformation: detail.financialInformation ?? null,
+    });
+    await replaceEntityPointsOfContact(entityId, detail.pointsOfContact ?? []);
+    await replaceEntitySocioEconomic(entityId, detail.socioEconomic ?? []);
   },
 };
 
